@@ -4,7 +4,11 @@
     "excel-service": {
       "name": "Excel / planillas",
       "description": "Procesamiento y generacion de planillas Excel",
-      "implemented": false,
+      "implemented": true,
+      "contract": {
+        "output": ["*.xlsx"],
+        "validators": ["Test-PwxExcelOutput"]
+      },
       "basePrice": 80000,
       "estimatedHours": 2,
       "minMarginPct": 30,

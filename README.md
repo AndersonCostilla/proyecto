@@ -36,6 +36,9 @@ powershell -File src\bin\pwx.ps1 job:new -ClientId C-0001 -Service simulate-serv
 # Extraer requisitos con el LLM local
 powershell -File src\bin\pwx.ps1 job:requisitos -JobId J-0001 -Request "Simula la generacion de un informe comercial"
 
+# Adjuntar un archivo de entrada (por ejemplo, un Excel para excel-service)
+powershell -File src\bin\pwx.ps1 job:input -JobId J-0001 -Path "C:\ruta\planilla.xlsx"
+
 # Producir (ejecuta el servicio y QA determinista)
 powershell -File src\bin\pwx.ps1 job:produce -JobId J-0001
 
@@ -60,7 +63,7 @@ Harness propio sin dependencias (no usa Pester). Los tests usan workspaces tempo
 
 ```
 client:new / client:list / client:show
-job:new / job:show / job:list / job:requisitos / job:produce / job:qa
+job:new / job:show / job:list / job:requisitos / job:input / job:produce / job:qa
 job:deliver / job:approvedeliver / job:state / job:note
 services:list / price:calc
 outbox:new / outbox:show / outbox:list / outbox:approve / outbox:send

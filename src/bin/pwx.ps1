@@ -19,6 +19,7 @@ COMANDOS DE TRABAJO:
   job:show          -JobId <id>
   job:list          [-ClientId <id>]
   job:requisitos    -JobId <id> -Request "solicitud del cliente"
+  job:input         -JobId <id> -Path <archivo> [-TargetName <nombre>]
   job:produce       -JobId <id>
   job:qa            -JobId <id>
   job:deliver       -JobId <id> [-AllowFail]  (AllowFail requiere env PWX_ALLOW_DELIVERY_BYPASS=1, solo tests/desarrollo)
@@ -137,6 +138,16 @@ switch ($cmd) {
         if (-not $id) { throw 'Falta -JobId' }
         $result = Invoke-PwxProductionAgent -JobId $id
         $result | ConvertTo-Json -Depth 5
+        exit 0
+    }
+    'job:input' {
+        $id = Read-PwxFlag -FlagList $rest -Name '-JobId'
+        $path = Read-PwxFlag -FlagList $rest -Name '-Path'
+        $targetName = Read-PwxFlag -FlagList $rest -Name '-TargetName'
+        if (-not $id) { throw 'Falta -JobId' }
+        if (-not $path) { throw 'Falta -Path' }
+        $entry = Add-PwxJobInputFile -JobId $id -SourcePath $path -TargetName $targetName
+        $entry | ConvertTo-Json -Depth 5
         exit 0
     }
     'job:qa' {
