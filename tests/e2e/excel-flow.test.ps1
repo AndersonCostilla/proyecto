@@ -50,6 +50,23 @@ Run-PwxTest -Name 'E2E: excel-service ciclo completo hasta DELIVERED con verific
     Assert-PwxTrue ($manifestEntry.Count -eq 1) 'Manifest registra el xlsx'
     Assert-PwxEqual (Get-PwxSha256 -Path $outPath) $manifestEntry[0].sha256 'manifest sha256 == hash del archivo de salida'
 
+    $manifestPath = Join-Path $found.JobDir 'delivery\manifest.json'
+    $manifest = Get-PwxJsonFile -Path $manifestPath
+    Assert-PwxEqual '1' $manifest.schema_version
+    Assert-PwxEqual $job.id $manifest.job_id
+    Assert-PwxEqual $client.id $manifest.client_id
+    Assert-PwxEqual 'excel-service' $manifest.service
+    Assert-PwxEqual 'PASS' $manifest.qa.verdict
+    $stdEntry = @($manifest.outputs | Where-Object { $_.name -eq 'resultado-normalizado.xlsx' })
+    Assert-PwxTrue ($stdEntry.Count -eq 1) 'manifest.outputs registra el xlsx'
+    Assert-PwxEqual (Get-PwxSha256 -Path $outPath) $stdEntry[0].sha256 'manifest.outputs sha256 == hash real'
+
+    $checksumsPath = Join-Path $found.JobDir 'delivery\checksums.sha256'
+    Assert-PwxTrue (Test-Path -LiteralPath $checksumsPath) 'checksums.sha256 debe existir'
+    $cks = [System.IO.File]::ReadAllText($checksumsPath)
+    Assert-PwxTrue ($cks -match ([regex]::Escape('manifest.json'))) 'checksums incluye manifest.json'
+    Assert-PwxTrue ($cks -match ([regex]::Escape('resultado-normalizado.xlsx'))) 'checksums incluye el entregable'
+
     Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue | Out-Null
     $zip = $null
     try { $zip = [System.IO.Compression.ZipFile]::OpenRead($deliveredPath) }

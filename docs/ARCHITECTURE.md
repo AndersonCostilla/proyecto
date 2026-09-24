@@ -28,7 +28,7 @@ proyecto/
       pricing.ps1          # precios deterministas desde el catalogo
       outbox.ps1           # cola de mensajes salientes (DRAFT->APPROVED->SENT)
       qa.ps1               # validacion determinista de salida (PASS/FAIL)
-      delivery.ps1         # empaquetado + manifest con sha256
+      delivery.ps1         # empaquetado + manifest.json + checksums.sha256
     agents/                # usa LLM local (Ollama)
       ollama.ps1           # invoca /api/tags y /api/chat, categoriza errores
       requirements.ps1     # extrae especificacion JSON, la valida y conforma
@@ -75,7 +75,7 @@ Transiciones definidas en `src/core/state.ps1` (`$PwxStateTransitions`). `Set-Pw
    - Si el servicio no esta implementado -> `BLOCKED` con `SERVICE_NOT_IMPLEMENTED`.
    - Ejecuta QA determinista (`Invoke-PwxQa`): carpeta de salida, no vacia, patrones requeridos, archivos no vacios.
    - QA PASS -> `QA -> READY_FOR_DELIVERY`; QA FAIL -> `REWORK`.
-5. `job:deliver` -> copia `output/` a `delivery/` y escribe `delivery_manifest.json` con sha256 por archivo. Rechaza sin QA PASS (o `-AllowFail` en pruebas).
+5. `job:deliver` -> copia `output/` a `delivery/` y escribe `delivery/manifest.json` (estandar) + `delivery/checksums.sha256` con sha256 por archivo (ver `docs/DELIVERY_FORMAT.md`). Rechaza sin QA PASS (o `-AllowFail` en pruebas).
 6. `job:approvedeliver` -> `READY_FOR_DELIVERY -> DELIVERED` (aprobacion humana).
 7. `outbox:new/approve/send` -> mensajes de notificacion con transiciones validadas; nunca se "envian" sin aprobacion.
 

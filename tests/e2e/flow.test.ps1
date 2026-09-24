@@ -36,7 +36,9 @@ Run-PwxTest -Name 'E2E: ciclo completo cliente->trabajo->requisitos->produccion-
 
     $delivery = New-PwxDelivery -JobId $job.id
     Assert-PwxTrue ($delivery.file_count -ge 1) 'Debe haber al menos un archivo'
-    Assert-PwxTrue (Test-Path -LiteralPath (Join-Path $ws ('clients\' + $client.id + '\jobs\' + $job.id + '\delivery\delivery_manifest.json'))) 'Manifiesto debe existir'
+    $deliveryDir = Join-Path $ws ('clients\' + $client.id + '\jobs\' + $job.id + '\delivery')
+    Assert-PwxTrue (Test-Path -LiteralPath (Join-Path $deliveryDir 'manifest.json')) 'manifest.json debe existir'
+    Assert-PwxTrue (Test-Path -LiteralPath (Join-Path $deliveryDir 'checksums.sha256')) 'checksums.sha256 debe existir'
 
     $msg = New-PwxOutboxItem -Recipient 'e2e@mail.com' -Subject 'Listo' -Body 'Entregado.' -JobId $job.id
     Assert-PwxEqual 'DRAFT' $msg.status

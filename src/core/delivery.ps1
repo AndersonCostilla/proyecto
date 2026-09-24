@@ -1,3 +1,31 @@
+function ConvertTo-PwxUtc {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $null }
+    try {
+        $dt = [datetime]::Parse($Value, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+        return $dt.ToUniversalTime().ToString('o')
+    }
+    catch {
+        return ([DateTime]::UtcNow).ToString('o')
+    }
+}
+
+function Get-PwxUtcTimestamp {
+    return ([DateTime]::UtcNow).ToString('o')
+}
+
+function Write-PwxChecksums {
+    param([string]$DeliveryDir)
+    $cksumLines = @()
+    foreach ($f in (Get-ChildItem -LiteralPath $DeliveryDir -File -Recurse | Sort-Object -Property FullName -CaseSensitive:$false)) {
+        $rel = Get-PwxRelativePath -BasePath $DeliveryDir -ChildPath $f.FullName
+        if ($rel -and $rel -ne 'checksums.sha256') {
+            $cksumLines += ('{0}  {1}' -f (Get-PwxSha256 -Path $f.FullName), $rel)
+        }
+    }
+    [System.IO.File]::WriteAllText((Join-Path $DeliveryDir 'checksums.sha256'), (($cksumLines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+}
+
 function New-PwxDelivery {
     param(
         [Parameter(Mandatory)][string]$JobId,
@@ -49,35 +77,85 @@ function New-PwxDelivery {
     }
     New-PwxDirectory -Path $deliveryDir | Out-Null
     $files = @(Get-ChildItem -LiteralPath $outputDir -File -Recurse -ErrorAction SilentlyContinue)
-    $manifest = @()
     foreach ($f in $files) {
         $rel = Get-PwxRelativePath -BasePath $outputDir -ChildPath $f.FullName
         $dest = Join-Path $deliveryDir $rel
         $destParent = Split-Path -Parent $dest
         New-PwxDirectory -Path $destParent | Out-Null
         Copy-Item -LiteralPath $f.FullName -Destination $dest -Force
-        $manifest += [ordered]@{
-            name   = ([System.IO.Path]::GetFileName($f.FullName))
-            path   = $rel
-            size   = $f.Length
-            sha256 = Get-PwxSha256 -Path $f.FullName
+    }
+
+    $snapshot = @(Get-PwxOutputSnapshot -JobId $JobId | Sort-Object -Property path -CaseSensitive:$false)
+    $outputList = @()
+    $deliverables = @()
+    foreach ($o in $snapshot) {
+        $outputList += [ordered]@{
+            name   = $o.name
+            path   = $o.path
+            sha256 = $o.sha256
+            bytes  = $o.size
+        }
+        $deliverables += [ordered]@{
+            name   = $o.name
+            path   = $o.path
+            size   = $o.size
+            sha256 = $o.sha256
         }
     }
+
+    $inputList = @()
+    foreach ($in in @($job.files.input)) {
+        $inFull = Join-Path $found.JobDir $in.path
+        try { $inFull = Assert-PwxSafeWorkspacePath -WorkspacePath $found.JobDir -Path $inFull } catch { continue }
+        if (-not (Test-Path -LiteralPath $inFull)) { continue }
+        $inputList += [ordered]@{
+            name   = $in.name
+            path   = (Get-PwxRelativePath -BasePath $found.JobDir -ChildPath $inFull)
+            sha256 = Get-PwxSha256 -Path $inFull
+            bytes  = (Get-Item -LiteralPath $inFull).Length
+        }
+    }
+    $inputList = @($inputList | Sort-Object -Property name -CaseSensitive:$false)
+
+    $qaSection = [ordered]@{}
+    $qaSection.verdict = if ($qa) { $qa.verdict } else { 'NONE' }
+    $qaSection.at_utc = if ($qa) { ConvertTo-PwxUtc -Value $qa.checked_at } else { $null }
+    if ((-not $qa) -or $qa.verdict -ne 'PASS') {
+        $qaSection.code = if ($qa) { 'QA_NOT_PASS' } else { 'QA_NOT_RUN' }
+        if ($qa -and $qa.code) { $qaSection.code = $qa.code }
+        $qaSection.detail = 'Delivery AllowFail sin QA PASS'
+        if ($qa) {
+            $failDetails = @($qa.checks | Where-Object { -not $_.ok } | ForEach-Object { $_.detail } | Where-Object { $_ })
+            $qaSection.detail = if ($qa.detail) { $qa.detail } else { ($failDetails -join '; ') }
+        }
+    }
+
     $deliveryManifest = [ordered]@{
+        schema_version = '1'
         job_id         = $JobId
+        client_id      = $found.ClientId
+        service        = $job.service
+        created_utc    = Get-PwxUtcTimestamp
+        inputs         = $inputList
+        outputs        = $outputList
+        qa             = $qaSection
+        notes          = @($job.notes)
+        output_version = (Get-PwxJobOutputVersion -JobId $JobId)
+        file_count     = $deliverables.Count
+        files          = $deliverables
         created_at     = Get-PwxTimestamp
         delivered_at   = $null
-        file_count     = $manifest.Count
-        files          = $manifest
-        output_version = (Get-PwxJobOutputVersion -JobId $JobId)
         qa_checked_at  = if ($qa) { $qa.checked_at } else { $null }
         approved_by    = $null
     }
-    Set-PwxJsonFile -Path (Join-Path $deliveryDir 'delivery_manifest.json') -Object $deliveryManifest | Out-Null
+    Set-PwxJsonFile -Path (Join-Path $deliveryDir 'manifest.json') -Object $deliveryManifest | Out-Null
+
+    Write-PwxChecksums -DeliveryDir $deliveryDir
+
     $job.delivery_manifest = $deliveryManifest
     $job.qa = Get-PwxQaResult -JobId $JobId
     Save-PwxJob -Job $job | Out-Null
-    Write-PwxLog -Component 'delivery' -Message "Paquete de entrega creado para $JobId ($($manifest.Count) archivos)" -JobId $JobId
+    Write-PwxLog -Component 'delivery' -Message "Paquete de entrega creado para $JobId ($($deliverables.Count) archivos, manifest.json + checksums.sha256)" -JobId $JobId
     if ($job.state -ne 'READY_FOR_DELIVERY') {
         Set-PwxJobState -JobId $JobId -To 'READY_FOR_DELIVERY' -Reason 'Delivery empaquetado' | Out-Null
     }
@@ -89,7 +167,7 @@ function Get-PwxDeliveryManifest {
     $job = Get-PwxJob -JobId $JobId
     if (-not $job) { throw "Trabajo inexistente: $JobId" }
     $found = Find-PwxJob -JobId $JobId
-    $file = Join-Path $found.JobDir 'delivery\delivery_manifest.json'
+    $file = Join-Path $found.JobDir 'delivery\manifest.json'
     if (-not (Test-Path -LiteralPath $file)) { return $null }
     return Get-PwxJsonFile -Path $file
 }
@@ -107,7 +185,8 @@ function Approve-PwxDelivery {
     $manifest.delivered_at = Get-PwxTimestamp
     $manifest.approved_by = $By
     $found = Find-PwxJob -JobId $JobId
-    Set-PwxJsonFile -Path (Join-Path $found.JobDir 'delivery\delivery_manifest.json') -Object $manifest | Out-Null
+    Set-PwxJsonFile -Path (Join-Path $found.JobDir 'delivery\manifest.json') -Object $manifest | Out-Null
+    Write-PwxChecksums -DeliveryDir (Join-Path $found.JobDir 'delivery')
     $job.delivery_manifest = $manifest
     Save-PwxJob -Job $job | Out-Null
     Write-PwxLog -Component 'delivery' -Message "Entrega aprobada por $By para $JobId" -JobId $JobId
