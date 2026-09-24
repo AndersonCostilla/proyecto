@@ -1,0 +1,9 @@
+{
+  "email": {
+    "subject": "Hola {{name}} - {{company}}",
+    "body": "Hola {{name}},\n\nMe pongo en contacto desde {{company}} para conocer si hay alguna oportunidad para colaborar.\n\nGracias por tu tiempo.\n\nSaludos cordiales."
+  },
+  "whatsapp": {
+    "body": "Hola {{name}}! Soy de {{company}}. Te escribo para ver si podemos hablar un momento sobre posibles oportunidades de colaboración. Gracias!"
+  }
+}

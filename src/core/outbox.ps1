@@ -14,7 +14,8 @@ function New-PwxOutboxItem {
         [string]$Body = '',
         [string[]]$Attachments = @(),
         [string]$JobId = '',
-        [string]$ClientId = ''
+        [string]$ClientId = '',
+        [string]$LeadId = ''
     )
     $id = Get-PwxOutboxId
     $item = [ordered]@{
@@ -28,6 +29,7 @@ function New-PwxOutboxItem {
         status       = 'DRAFT'
         job_id       = $JobId
         client_id    = $ClientId
+        lead_id      = $LeadId
         created_at   = Get-PwxTimestamp
         approved_by  = $null
         approved_at  = $null

@@ -251,6 +251,75 @@ switch ($cmd) {
         $item | ConvertTo-Json -Depth 6
         exit 0
     }
+    'lead:new' {
+        $name = Read-PwxFlag -FlagList $rest -Name '-Name'
+        $company = Read-PwxFlag -FlagList $rest -Name '-Company'
+        $email = Read-PwxFlag -FlagList $rest -Name '-Email'
+        $phone = Read-PwxFlag -FlagList $rest -Name '-Phone'
+        $city = Read-PwxFlag -FlagList $rest -Name '-City'
+        $department = Read-PwxFlag -FlagList $rest -Name '-Department'
+        $website = Read-PwxFlag -FlagList $rest -Name '-Website'
+        $lead = New-PwxLead -Name $name -Company $company -Email $email -Phone $phone -City $city -Department $department -Website $website
+        $lead | ConvertTo-Json -Depth 5
+        exit 0
+    }
+    'lead:import' {
+        $path = Read-PwxFlag -FlagList $rest -Name '-Path'
+        if (-not $path) { throw 'Falta -Path' }
+        $ext = [System.IO.Path]::GetExtension($path).ToLowerInvariant()
+        if ($ext -eq '.csv') {
+            $result = Import-PwxLeadsFromCsv -Path $path
+        } elseif ($ext -eq '.json') {
+            $result = Import-PwxLeadsFromJson -Path $path
+        } else {
+            throw 'Formato no soportado. Use .csv o .json'
+        }
+        $result | ConvertTo-Json -Depth 5
+        exit 0
+    }
+    'lead:import-socrata' {
+        $url = Read-PwxFlag -FlagList $rest -Name '-Url'
+        $limit = Read-PwxFlag -FlagList $rest -Name '-Limit'
+        $map = Read-PwxFlag -FlagList $rest -Name '-Map'
+        if (-not $url) { throw 'Falta -Url' }
+        $lim = 200
+        if ($limit) { [int]::TryParse($limit, [ref]$lim) | Out-Null }
+        $result = Import-PwxLeadsFromSocrata -Url $url -Limit $lim -Map $map
+        $result | ConvertTo-Json -Depth 5
+        exit 0
+    }
+    'lead:list' {
+        $leads = Get-PwxLeads
+        if ($leads.Count -eq 0) { Write-Host '(sin leads)' }
+        else { $leads | ForEach-Object { "{0}  {1}  {2}  {3}  s={4}" -f $_.id, $_.status, $_.name, $_.company, $_.score } }
+        exit 0
+    }
+    'lead:dedupe' {
+        $updated = Invoke-PwxLeadsDedupe
+        @{ updated = $updated } | ConvertTo-Json -Depth 3
+        exit 0
+    }
+    'lead:score' {
+        $updated = Invoke-PwxLeadsScore
+        @{ updated = $updated } | ConvertTo-Json -Depth 3
+        exit 0
+    }
+    'lead:draft' {
+        $leadId = Read-PwxFlag -FlagList $rest -Name '-LeadId'
+        $channel = Read-PwxFlag -FlagList $rest -Name '-Channel'
+        if (-not $channel) { $channel = 'email' }
+        if (-not $leadId) { throw 'Falta -LeadId' }
+        $result = New-PwxLeadDraft -LeadId $leadId -Channel $channel
+        $result | ConvertTo-Json -Depth 6
+        exit 0
+    }
+    'lead:convert' {
+        $leadId = Read-PwxFlag -FlagList $rest -Name '-LeadId'
+        if (-not $leadId) { throw 'Falta -LeadId' }
+        $result = Convert-PwxLeadToClient -LeadId $leadId
+        $result | ConvertTo-Json -Depth 5
+        exit 0
+    }
     'config:show' {
         Get-PwxConfig | ConvertTo-Json -Depth 5
         exit 0
