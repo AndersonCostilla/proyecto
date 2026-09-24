@@ -1,0 +1,26 @@
+# Enforce LF for text files (cross-platform)
+* text=auto eol=lf
+
+# PowerShell
+*.ps1  text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+
+# Config / docs
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.txt  text eol=lf
+
+# Binary files
+*.xlsx binary
+*.zip  binary
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.exe  binary
+*.dll  binary
+*.pdb  binary
