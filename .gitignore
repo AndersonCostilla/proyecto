@@ -1,0 +1,17 @@
+# Datos de operacion (workspace local)
+store/
+logs/
+
+# Secretos y configuracion local
+.env
+*.env
+config.local.json
+*.key
+*.pem
+
+# Node (por si se usa en el futuro)
+node_modules/
+
+# Artefactos de herramientas
+*.log
+.md.tmp

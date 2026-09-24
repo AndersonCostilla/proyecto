@@ -1,0 +1,91 @@
+{
+  "currency": "COP",
+  "services": {
+    "excel-service": {
+      "name": "Excel / planillas",
+      "description": "Procesamiento y generacion de planillas Excel",
+      "implemented": false,
+      "basePrice": 80000,
+      "estimatedHours": 2,
+      "minMarginPct": 30,
+      "rules": {
+        "maxDiscountPct": 10
+      },
+      "addons": {
+        "rush": { "name": "Entrega urgente", "price": 25000 },
+        "extra-sheet": { "name": "Hoja adicional", "price": 10000 }
+      }
+    },
+    "word-service": {
+      "name": "Documentos Word",
+      "description": "Redaccion y formateo de documentos de texto",
+      "implemented": false,
+      "basePrice": 60000,
+      "estimatedHours": 1.5,
+      "minMarginPct": 30,
+      "rules": {
+        "maxDiscountPct": 10
+      },
+      "addons": {
+        "rush": { "name": "Entrega urgente", "price": 20000 }
+      }
+    },
+    "pdf-service": {
+      "name": "PDF",
+      "description": "Conversion y ensamblado de PDF",
+      "implemented": false,
+      "basePrice": 50000,
+      "estimatedHours": 1,
+      "minMarginPct": 30,
+      "rules": {
+        "maxDiscountPct": 10
+      },
+      "addons": {}
+    },
+    "data-service": {
+      "name": "Limpieza de datos",
+      "description": "Normalizacion, deduplicacion y transformacion de datos",
+      "implemented": false,
+      "basePrice": 120000,
+      "estimatedHours": 3,
+      "minMarginPct": 30,
+      "rules": {
+        "maxDiscountPct": 10
+      },
+      "addons": {
+        "rush": { "name": "Entrega urgente", "price": 30000 }
+      }
+    },
+    "construction-service": {
+      "name": "Cómputos y presupuestos de obra",
+      "description": "Cuantificacion y presupuestacion de partidas de construccion",
+      "implemented": false,
+      "basePrice": 200000,
+      "estimatedHours": 4,
+      "minMarginPct": 40,
+      "rules": {
+        "maxDiscountPct": 10
+      },
+      "addons": {
+        "rush": { "name": "Entrega urgente", "price": 40000 },
+        "apv": { "name": "Analisis de precios unitarios", "price": 50000 }
+      }
+    },
+    "simulate-service": {
+      "name": "Produccion simulada",
+      "description": "Servicio interno para pruebas: genera salida deterministicamente",
+      "implemented": true,
+      "contract": {
+        "output": ["resultado.txt"],
+        "validators": []
+      },
+      "basePrice": 10000,
+      "estimatedHours": 0.1,
+      "minMarginPct": 0,
+      "rules": {
+        "maxDiscountPct": 0
+      },
+      "addons": {}
+    }
+  }
+}

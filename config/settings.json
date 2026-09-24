@@ -1,0 +1,12 @@
+{
+  "model": "qwen3:8b",
+  "ollama": {
+    "baseUrl": "http://localhost:11434",
+    "connectTimeoutSeconds": 5,
+    "requestTimeoutSeconds": 120
+  },
+  "workspace": "store",
+  "currency": "COP",
+  "logLevel": "INFO",
+  "serviceCatalogFile": "config/services.json"
+}
