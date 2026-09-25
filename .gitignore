@@ -15,3 +15,6 @@ node_modules/
 # Artefactos de herramientas
 *.log
 .md.tmp
+# Archivos locales de prueba (leads)
+mi-lista.csv
+
