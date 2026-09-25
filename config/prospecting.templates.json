@@ -1,9 +1,9 @@
 {
   "email": {
-    "subject": "Hola {{name}} - idea para tus Excel ({{brand_name}})",
-    "body": "Hola {{name}},\n\n{{company_context}}\n\nEn {{brand_name}} {{value_prop}}.\n\n{{cta}}\n\nSaludos,\n{{sender_name}}\n{{sender_role}}"
+    "subject": "Excel limpio y listo para operar ({{brand_name}})",
+    "body": "Hola {{name}},\n\n{{company_context}}\n\nEn {{brand_name}} hacemos que tus archivos Excel trabajen por ti:\n\n- Normalizamos precios, inventarios y bases de datos.\n- Detectamos errores, duplicados y datos incompletos.\n- Te entregamos un archivo limpio, validado y listo para operar.\n\nSin costo y sin compromiso. {{cta}}\n\nSaludos,\n{{sender_name}}\n{{sender_role}}"
   },
   "whatsapp": {
-    "body": "Hola {{name}}! {{company_context}}\n\nEn {{brand_name}} {{value_prop}}. {{cta}}"
+    "body": "Hola {{name}}, soy {{sender_name}} de {{brand_name}}.\n{{company_context}}\n{{value_prop}}\n{{cta}}"
   }
 }

@@ -132,3 +132,19 @@ Ejemplo con ruta explícita:
 - No toca excel-service
 - 100% local, sin llamadas externas (excepto Socrata API público con Invoke-RestMethod)
 - Sin envío automático - aprobación humana obligatoria
+
+## Cómo ajustar el mensaje (profile + templates)
+
+El texto de los borradores se configura en dos archivos JSON, **sin tocar código**:
+
+- `config/prospecting.profile.json` — identidad y propuesta:
+  - `value_prop`: propuesta de valor concreta (qué se hace y qué se entrega).
+  - `cta`: pregunta para agendar los 10 minutos (debe quedar sin costo y sin compromiso).
+  - `brand_name`, `sender_name`, `sender_role`: cómo se firman los mensajes.
+- `config/prospecting.templates.json` — plantillas por canal:
+  - `email.subject` / `email.body`: asunto y cuerpo con bullets breves.
+  - `whatsapp.body`: mensaje corto (2-4 líneas), directo y humano.
+
+Los templates usan variables que se reemplazan automáticamente: `{{name}}`, `{{company_context}}`, `{{value_prop}}`, `{{cta}}`, `{{brand_name}}`, `{{sender_name}}`, `{{sender_role}}` (y los datos del lead). `{{company_context}}` cita la empresa del lead **solo como contexto**; los mensajes nunca se firman con la empresa del lead. El canal `whatsapp` usa el teléfono (solo dígitos) y el canal `email` usa el email.
+
+Para cambiar la propuesta de valor o el CTA, basta editar el JSON y volver a generar los borradores con `lead:draft`; no requiere modificar scripts.
