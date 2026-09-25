@@ -41,6 +41,7 @@ OUTBOX:
   outbox:list       [-Status DRAFT|APPROVED|SENT]
   outbox:approve    -Id <msg-id> -By <quien>
   outbox:send       -Id <msg-id>
+  outbox:export     [-Status DRAFT] [-Path <ruta>]  (exporta borradores DRAFT a workspace/exports; solo lectura, no envia)
 
 SISTEMA:
   config:show
@@ -249,6 +250,20 @@ switch ($cmd) {
         if (-not $id) { throw 'Falta -Id' }
         $item = Set-PwxOutboxStatus -Id $id -Status 'SENT'
         $item | ConvertTo-Json -Depth 6
+        exit 0
+    }
+    'outbox:export' {
+        $status = Read-PwxFlag -FlagList $rest -Name '-Status'
+        $path = Read-PwxFlag -FlagList $rest -Name '-Path'
+        if (-not $status) { $status = 'DRAFT' }
+        if ($status -ne 'DRAFT') { throw 'outbox:export solo exporta mensajes en estado DRAFT' }
+        $result = Export-PwxOutboxCsv -Path $path
+        Write-Host ("Archivo: {0}" -f $result.path)
+        Write-Host ("Exportados: {0}" -f $result.exported)
+        Write-Host ("Omitidos: {0}" -f $result.omitted.count)
+        foreach ($o in $result.omitted.items) {
+            Write-Host ("  {0}: {1}" -f $o.id, $o.reason)
+        }
         exit 0
     }
     'lead:new' {

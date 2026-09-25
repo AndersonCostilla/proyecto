@@ -102,6 +102,29 @@ Nota: `-Channel whatsapp` usa `lead.phone` (solo dígitos) como recipient; `-Cha
 6. **Aprobar manualmente**: `outbox:approve -Id M-XXXX -By "humano"` (opcional)
 7. **Enviar SOLO cuando aprobado**: `outbox:send -Id M-XXXX` (requiere aprobación previa)
 
+## Exportar borradores a CSV (revisión manual)
+
+Para revisar o enviar borradores fuera de la CLI, el comando `outbox:export` genera un CSV **solo de mensajes en estado DRAFT** en `workspace/exports/`:
+
+```
+.\src\bin\pwx.ps1 outbox:export [-Status DRAFT] [-Path <ruta>]
+```
+
+- **Solo lectura**: **NO** aprueba, envía ni modifica ningún mensaje (status y `sent_at` quedan intactos).
+- Archivo por defecto: `exports/outbox-drafts-<fecha>-<identificador>.csv`. Nunca sobrescribe archivos existentes (si la ruta ya existe, falla o genera un nombre nuevo).
+- `-Path` opcional con la salida validada para que quede **dentro de `workspace/exports`** (se bloquean rutas inseguras y path traversal).
+- Columnas: `id, channel, recipient, subject, body, lead_id, status, created_at`.
+- Se omiten borradores **sin destinatario** o con canal/destinatario incompatible (`email` requiere email válido; `whatsapp` requiere teléfono de solo dígitos). Los IDs omitidos y su motivo se reportan al final.
+- UTF-8 compatible con Excel; body conserva comas, comillas y saltos de línea.
+- **Protección de inyección de fórmulas**: celdas que comienzan (incluso tras espacios o saltos) con `=`, `+`, `-` o `@` se prefijan con un apóstrofo `'` para que Excel las trate como texto. Al abrir el CSV en Excel, esas celdas pueden mostrar un apóstrofo inicial.
+- **Aviso**: el CSV contiene datos personales de leads (nombre, email, teléfono, mensajes). Guárdelo y compártalo con cuidado. Generar el CSV **no** envía nada.
+
+Ejemplo con ruta explícita:
+
+```
+.\src\bin\pwx.ps1 outbox:export -Path "revision-2026-09.csv"
+```
+
 ## Restricciones
 
 - Sin dependencias nuevas
