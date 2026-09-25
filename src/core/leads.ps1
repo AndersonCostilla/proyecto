@@ -308,15 +308,30 @@ function New-PwxLeadDraft {
     if (-not $lead) { throw "Lead inexistente: $LeadId" }
     if ($lead.duplicate_of) { throw "No se puede generar borrador para lead duplicado: $LeadId" }
     
+    # Recipient por canal: email -> lead.email; whatsapp -> lead.phone (solo digitos).
+    # Validar ANTES de crear cualquier outbox item.
+    $channelLower = $Channel.ToLowerInvariant()
+    if ($channelLower -eq 'whatsapp') {
+        $recipient = Normalize-PwxPhone -Phone $lead.phone
+        if (-not $recipient) {
+            throw "El lead $LeadId no tiene telefono para el canal whatsapp; no se creo ningun mensaje en outbox"
+        }
+    }
+    else {
+        $recipient = $lead.email
+        if (-not $recipient) {
+            throw "El lead $LeadId no tiene email para el canal email; no se creo ningun mensaje en outbox"
+        }
+    }
+    
     # If no subject/body provided, use prospecting agent
     if (-not $Subject -or -not $Body) {
-        $prospect = Invoke-PwxProspectingDraft -LeadId $LeadId -Channel $Channel
+        $prospect = Invoke-PwxProspectingDraft -LeadId $LeadId -Channel $channelLower
         if (-not $Subject) { $Subject = $prospect.subject }
         if (-not $Body) { $Body = $prospect.body }
     }
     
-    $recipient = if ($lead.email) { $lead.email } else { $lead.phone }
-    $item = New-PwxOutboxItem -Type 'message' -Channel $Channel -Recipient $recipient -Subject $Subject -Body $Body -LeadId $LeadId
+    $item = New-PwxOutboxItem -Type 'message' -Channel $channelLower -Recipient $recipient -Subject $Subject -Body $Body -LeadId $LeadId
     $lead.draft_id = $item.id
     $lead.status = 'DRAFTED'
     Save-PwxLead -Lead $lead | Out-Null

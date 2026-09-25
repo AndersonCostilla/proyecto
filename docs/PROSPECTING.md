@@ -47,6 +47,21 @@ Columnas soportadas (flexibles, nombres en español/inglés):
 - Si Ollama/modelo disponible: genera "razón de encaje" + borrador (email/whatsapp)
 - Si no hay LLM: usa plantillas deterministas en `config/prospecting.templates.json`
 
+### Perfil de marca / firma: `config/prospecting.profile.json`
+Se configura quién firma los borradores (nunca la empresa del prospecto):
+- `brand_name`: "MindSprit"
+- `sender_name`: "Anderson"
+- `sender_role`: "Equipo MindSprit"
+- `value_prop`: propuesta de valor de una línea
+- `cta`: llamada a la acción (ej: "¿Te parece si lo revisamos 10 min esta semana?")
+
+Regla de branding: los borradores se firman con `sender_name` + `brand_name`. La empresa del lead (`lead.company`) solo puede aparecer como contexto del mensaje (ej: "Vi a Constrular SAS..."), NUNCA como remitente.
+
+### Recipient por canal (lead:draft)
+- **Canal `email`**: recipient = `lead.email` (obligatorio). Si el lead no tiene email → error claro y NO se crea nada en outbox.
+- **Canal `whatsapp`**: recipient = `lead.phone` (solo dígitos, sin `+57`). Si el lead no tiene teléfono → error claro y NO se crea nada en outbox.
+- Ambos canales mantienen `lead_id` en el item de outbox y todo queda en estado **DRAFT** (nunca se envía automáticamente).
+
 ### Integración OUTBOX
 - `lead:draft` crea `outbox:new` en estado DRAFT con subject/body y metadata (leadId, channel)
 - **NO envía**. Requiere aprobación humana (`outbox:approve` + `outbox:send`)
@@ -74,6 +89,8 @@ Columnas soportadas (flexibles, nombres en español/inglés):
 .\src\bin\pwx.ps1 lead:draft -LeadId L-0001 [-Channel email|whatsapp]
 .\src\bin\pwx.ps1 lead:convert -LeadId L-0001
 ```
+
+Nota: `-Channel whatsapp` usa `lead.phone` (solo dígitos) como recipient; `-Channel email` usa `lead.email`. Si el dato requerido falta, el comando falla con un error claro y NO crea ningún mensaje en outbox.
 
 ## Flujo recomendado
 

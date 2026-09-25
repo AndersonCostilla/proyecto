@@ -83,6 +83,66 @@ Run-PwxTest -Name 'lead:draft crea outbox DRAFT (nunca SENT)' -File 'unit' -Body
     Assert-PwxNull $draft.sent_at 'No debe haber sent_at'
 }
 
+Run-PwxTest -Name 'hotfix: draft email y whatsapp usan recipient correcto por canal' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    $lead = New-PwxLead -Name 'Ana' -Company 'AnaCo' -Email 'ana@anaco.co' -Phone '+57 (301) 555 8899'
+    $emailDraft = New-PwxLeadDraft -LeadId $lead.id -Channel 'email'
+    Assert-PwxEqual 'email' $emailDraft.channel 'Canal email'
+    Assert-PwxEqual $lead.email $emailDraft.recipient 'email -> recipient = email del lead'
+    $waDraft = New-PwxLeadDraft -LeadId $lead.id -Channel 'whatsapp'
+    Assert-PwxEqual 'whatsapp' $waDraft.channel 'Canal whatsapp'
+    Assert-PwxEqual '573015558899' $waDraft.recipient 'whatsapp -> recipient = phone (solo digitos)'
+    Assert-PwxTrue ($waDraft.recipient -ne $lead.email) 'whatsapp recipient NO es el email'
+    Assert-PwxEqual $lead.id $waDraft.lead_id 'lead_id preservado en whatsapp'
+    Assert-PwxEqual 'DRAFT' $waDraft.status 'Whatsapp sigue siendo DRAFT'
+}
+
+Run-PwxTest -Name 'hotfix: draft whatsapp sin phone falla y no crea outbox' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    $lead = New-PwxLead -Name 'SinPhone' -Email 'sinphone@no.com'
+    $before = @(Get-PwxOutboxItems).Count
+    Assert-PwxThrows { New-PwxLeadDraft -LeadId $lead.id -Channel 'whatsapp' } 'Debe fallar sin phone para whatsapp'
+    $after = @(Get-PwxOutboxItems).Count
+    Assert-PwxEqual $before $after 'NO se debe crear ningun outbox item'
+    $still = Get-PwxLead -LeadId $lead.id
+    Assert-PwxEqual 'NEW' $still.status 'Lead no debe cambiar de estado'
+    Assert-PwxNull $still.draft_id 'Lead no debe tener draft_id'
+}
+
+Run-PwxTest -Name 'hotfix: draft email sin email falla y no crea outbox' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    $lead = New-PwxLead -Name 'SinEmail' -Phone '3005551122'
+    $before = @(Get-PwxOutboxItems).Count
+    Assert-PwxThrows { New-PwxLeadDraft -LeadId $lead.id -Channel 'email' } 'Debe fallar sin email para canal email'
+    $after = @(Get-PwxOutboxItems).Count
+    Assert-PwxEqual $before $after 'NO se debe crear ningun outbox item'
+}
+
+Run-PwxTest -Name 'hotfix: body usa MindSprit/Anderson y no a lead.company como remitente' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    $lead = New-PwxLead -Name 'Carla' -Company 'Constrular SAS' -Email 'carla@constrular.com.co' -Phone '3004445566'
+    $emailDraft = New-PwxLeadDraft -LeadId $lead.id -Channel 'email'
+    Assert-PwxTrue ($emailDraft.body.Contains('MindSprit')) 'email body menciona la marca MindSprit'
+    Assert-PwxTrue ($emailDraft.body.Contains('Anderson')) 'email body firmado por Anderson'
+    Assert-PwxTrue ($emailDraft.subject.Contains('MindSprit')) 'subject menciona la marca'
+    Assert-PwxTrue (-not $emailDraft.body.Contains('desde Constrular SAS')) 'email body no usa lead.company como remitente'
+    Assert-PwxTrue ($emailDraft.body.Contains('Constrular SAS')) 'email body si puede citar a Constrular solo como contexto'
+    $waDraft = New-PwxLeadDraft -LeadId $lead.id -Channel 'whatsapp'
+    Assert-PwxTrue ($waDraft.body.Contains('MindSprit')) 'whatsapp body menciona la marca'
+    Assert-PwxTrue (-not $waDraft.body.Contains('Soy de Constrular SAS')) 'whatsapp no dice "soy de <empresa del lead>"'
+    Assert-PwxTrue (-not $waDraft.body.Contains('desde Constrular SAS')) 'whatsapp no usa lead.company como remitente'
+    $all = Get-PwxOutboxItems -Status 'SENT'
+    Assert-PwxEqual 0 $all.Count 'Nada enviado'
+}
+
 Run-PwxTest -Name 'convertir lead a cliente vincula lead->client' -File 'unit' -Body {
     $ws = New-PwxTestWorkspace
     $env:PWX_WORKSPACE = $ws

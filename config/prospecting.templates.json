@@ -1,9 +1,9 @@
 {
   "email": {
-    "subject": "Hola {{name}} - {{company}}",
-    "body": "Hola {{name}},\n\nMe pongo en contacto desde {{company}} para conocer si hay alguna oportunidad para colaborar.\n\nGracias por tu tiempo.\n\nSaludos cordiales."
+    "subject": "Hola {{name}} - idea para tus Excel ({{brand_name}})",
+    "body": "Hola {{name}},\n\n{{company_context}}\n\nEn {{brand_name}} {{value_prop}}.\n\n{{cta}}\n\nSaludos,\n{{sender_name}}\n{{sender_role}}"
   },
   "whatsapp": {
-    "body": "Hola {{name}}! Soy de {{company}}. Te escribo para ver si podemos hablar un momento sobre posibles oportunidades de colaboración. Gracias!"
+    "body": "Hola {{name}}! {{company_context}}\n\nEn {{brand_name}} {{value_prop}}. {{cta}}"
   }
 }
