@@ -164,6 +164,23 @@ powershell -ExecutionPolicy Bypass -File src\bin\real-agent-check.ps1
 
 Genera un reporte JSON temporal y valida requisitos LLM, prospección LLM, producción, QA y cotización sin contactar personas ni usar pagos reales.
 
+## Ejemplo de informe técnico extenso
+
+El repositorio incluye una plantilla ficticia de informe técnico con preguntas respondidas, preguntas pendientes, diagnóstico, riesgos, indicadores y plan de 90 días:
+
+```text
+examples/informe-tecnico-plan-negocio-ejemplo.md
+```
+
+Puedes convertirla en Word mediante la prueba local aislada:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File src\bin\run-word-local.ps1 `
+  -InputPath ".\examples\informe-tecnico-plan-negocio-ejemplo.md"
+```
+
+Es material de demostración; reemplaza todos los datos ficticios antes de usarlo con un cliente.
+
 ## Servicios
 
 | Servicio | Estado |
