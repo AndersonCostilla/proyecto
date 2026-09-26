@@ -111,7 +111,7 @@ Sin Pester ni dependencias. `tests/runner.ps1` provee `Run-PwxTest`, `Assert-Pwx
 
 ## Limitaciones conocidas
 
-- `excel-service` y `simulate-service` están implementados. Word, PDF, limpieza de datos y construcción aún devuelven `SERVICE_NOT_IMPLEMENTED` al intentar producir.
+- `excel-service`, `word-service` y `simulate-service` están implementados. PDF, limpieza de datos y construcción aún devuelven `SERVICE_NOT_IMPLEMENTED` al intentar producir.
 - El cobro es local y manual: no hay conexión automática con Nequi, bancos, QR dinámicos ni facturación electrónica. Un humano debe revisar cada comprobante.
 - No hay envío real por email/WhatsApp; el outbox persiste estados (DRAFT/APPROVED/SENT) sin transport.
 - No hay autorización por rol ni multiusuario; las aprobaciones aún son campos de texto auditables.

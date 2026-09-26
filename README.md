@@ -170,7 +170,7 @@ Genera un reporte JSON temporal y valida requisitos LLM, prospección LLM, produ
 | --- | --- |
 | `excel-service` | Implementado: validación y normalización segura de planillas `.xlsx` |
 | `simulate-service` | Implementado: salida determinista para demos y pruebas |
-| `word-service` | Catálogo y cotización listos; producción pendiente |
+| `word-service` | Implementado: genera documentos `.docx` profesionales desde contenido `.txt` o `.md` |
 | `pdf-service` | Catálogo y cotización listos; producción pendiente |
 | `data-service` | Catálogo y cotización listos; producción pendiente |
 | `construction-service` | Catálogo y cotización listos; producción pendiente |
@@ -204,6 +204,7 @@ config:show / ollama:check
 - [Reglas de cotización](docs/PRICING.md)
 - [Pagos manuales](docs/PAYMENTS.md)
 - [Panel web local](docs/WEB_PANEL.md)
+- [Servicio Word](docs/WORD_SERVICE.md)
 - [Formato de entrega](docs/DELIVERY_FORMAT.md)
 - [Pruebas](docs/TESTING.md)
 

@@ -45,7 +45,7 @@
     "word-service": {
       "name": "Documentos Word",
       "description": "Redaccion y formateo de documentos de texto",
-      "implemented": false,
+      "implemented": true,
       "basePrice": 48000.0,
       "estimatedHours": 1.5,
       "minMarginPct": 30,
@@ -69,6 +69,14 @@
           "advanced": 1.35,
           "expert": 1.7
         }
+      },
+      "contract": {
+        "output": [
+          "*.docx"
+        ],
+        "validators": [
+          "Test-PwxWordOutput"
+        ]
       }
     },
     "pdf-service": {
