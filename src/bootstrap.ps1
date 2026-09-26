@@ -25,6 +25,7 @@ $moduleFiles = @(
     'agents\requirements.ps1',
     'agents\production.ps1',
     'agents\prospecting.ps1',
+    'services\common.ps1',
     'services\registry.ps1',
     'services\simulate.ps1',
     'services\excel.ps1',

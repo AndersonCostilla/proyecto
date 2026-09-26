@@ -1,0 +1,6 @@
+partida,descripcion,unidad,cantidad,precio_unitario
+1,Zapata aislada A-1,und,3,150000.50
+2,Viga corrida 30x40,m3,12.5,890000
+3,Acero fy40 tubulado,kg,"1,250",3900.75
+4,Hormigón f'c 210 kg/cm2,m3,8,720000
+5,Mampostería en block,m2,45.5,38500.25

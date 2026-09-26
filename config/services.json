@@ -6,8 +6,12 @@
       "description": "Procesamiento y generacion de planillas Excel",
       "implemented": true,
       "contract": {
-        "output": ["*.xlsx"],
-        "validators": ["Test-PwxExcelOutput"]
+        "output": [
+          "*.xlsx"
+        ],
+        "validators": [
+          "Test-PwxExcelOutput"
+        ]
       },
       "basePrice": 80000,
       "estimatedHours": 2,
@@ -16,14 +20,28 @@
         "maxDiscountPct": 10
       },
       "addons": {
-        "rush": { "name": "Entrega urgente", "price": 25000 },
-        "extra-sheet": { "name": "Hoja adicional", "price": 10000 }
+        "rush": {
+          "name": "Entrega urgente",
+          "price": 25000
+        },
+        "extra-sheet": {
+          "name": "Hoja adicional",
+          "price": 10000
+        }
       }
     },
     "word-service": {
       "name": "Documentos Word",
       "description": "Redaccion y formateo de documentos de texto",
-      "implemented": false,
+      "implemented": true,
+      "contract": {
+        "output": [
+          "documento.docx"
+        ],
+        "validators": [
+          "Test-PwxWordOutput"
+        ]
+      },
       "basePrice": 60000,
       "estimatedHours": 1.5,
       "minMarginPct": 30,
@@ -31,13 +49,24 @@
         "maxDiscountPct": 10
       },
       "addons": {
-        "rush": { "name": "Entrega urgente", "price": 20000 }
+        "rush": {
+          "name": "Entrega urgente",
+          "price": 20000
+        }
       }
     },
     "pdf-service": {
       "name": "PDF",
       "description": "Conversion y ensamblado de PDF",
-      "implemented": false,
+      "implemented": true,
+      "contract": {
+        "output": [
+          "documento.pdf"
+        ],
+        "validators": [
+          "Test-PwxPdfOutput"
+        ]
+      },
       "basePrice": 50000,
       "estimatedHours": 1,
       "minMarginPct": 30,
@@ -49,7 +78,16 @@
     "data-service": {
       "name": "Limpieza de datos",
       "description": "Normalizacion, deduplicacion y transformacion de datos",
-      "implemented": false,
+      "implemented": true,
+      "contract": {
+        "output": [
+          "datos-limpios.csv",
+          "informe-limpieza.txt"
+        ],
+        "validators": [
+          "Test-PwxDataOutput"
+        ]
+      },
       "basePrice": 120000,
       "estimatedHours": 3,
       "minMarginPct": 30,
@@ -57,13 +95,24 @@
         "maxDiscountPct": 10
       },
       "addons": {
-        "rush": { "name": "Entrega urgente", "price": 30000 }
+        "rush": {
+          "name": "Entrega urgente",
+          "price": 30000
+        }
       }
     },
     "construction-service": {
       "name": "Cómputos y presupuestos de obra",
       "description": "Cuantificacion y presupuestacion de partidas de construccion",
-      "implemented": false,
+      "implemented": true,
+      "contract": {
+        "output": [
+          "presupuesto.xlsx"
+        ],
+        "validators": [
+          "Test-PwxConstructionOutput"
+        ]
+      },
       "basePrice": 200000,
       "estimatedHours": 4,
       "minMarginPct": 40,
@@ -71,8 +120,14 @@
         "maxDiscountPct": 10
       },
       "addons": {
-        "rush": { "name": "Entrega urgente", "price": 40000 },
-        "apv": { "name": "Analisis de precios unitarios", "price": 50000 }
+        "rush": {
+          "name": "Entrega urgente",
+          "price": 40000
+        },
+        "apv": {
+          "name": "Analisis de precios unitarios",
+          "price": 50000
+        }
       }
     },
     "simulate-service": {
@@ -80,7 +135,9 @@
       "description": "Servicio interno para pruebas: genera salida deterministicamente",
       "implemented": true,
       "contract": {
-        "output": ["resultado.txt"],
+        "output": [
+          "resultado.txt"
+        ],
         "validators": []
       },
       "basePrice": 10000,
