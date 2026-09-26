@@ -75,9 +75,9 @@ function Invoke-PwxProspectingDraft {
     # Try to use LLM if available
     try {
         $ollamaStatus = Get-PwxOllamaStatus
-        if ($ollamaStatus.status -eq 'available') {
+        if ($ollamaStatus.status -eq 'OK') {
             $model = (Get-PwxConfig).Model
-            if (Test-PwxModelAvailable -Model $model) {
+            if ((Test-PwxModelAvailable -Model $model) -eq 'OK') {
                 $prompt = @"
 Genera un borrador de contacto profesional y respetuoso para el siguiente lead:
 
@@ -116,9 +116,13 @@ Para WHATSAPP: devuelve solo el mensaje.
 
 Respuesta:
 "@
-                $resp = Invoke-PwxOllamaGenerate -Model $model -Prompt $prompt -TimeoutSec 120
-                if ($resp -and $resp.response) {
-                    $text = $resp.response.Trim()
+                # Usa el adaptador común de chat para que la prospección tenga
+                # el mismo manejo de modelo, errores y timeouts que requisitos.
+                $resp = Invoke-PwxOllamaChat -Model $model -Prompt $prompt `
+                    -System 'Eres un asistente de prospección comercial profesional. Sigue exactamente las instrucciones del usuario.' `
+                    -FormatJson $false -Temperature 0.3
+                if ($resp -and $resp.ok -and $resp.content) {
+                    $text = $resp.content.Trim()
                     if ($channelLower -eq 'email') {
                         if ($text -match 'ASUNTO:\s*(.+?)(\n|CUERPO:)') {
                             $subject = $matches[1].Trim()

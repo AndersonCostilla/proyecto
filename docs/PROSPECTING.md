@@ -44,7 +44,7 @@ Columnas soportadas (flexibles, nombres en español/inglés):
 - Estados: NEW, QUALIFIED, DRAFTED, APPROVED_FOR_CONTACT, CONTACTED, CONVERTED, DISMISSED
 
 ### Agent: `src/agents/prospecting.ps1`
-- Si Ollama/modelo disponible: genera "razón de encaje" + borrador (email/whatsapp)
+- Si Ollama/modelo responde correctamente: genera "razón de encaje" + borrador (email/whatsapp)
 - Si no hay LLM: usa plantillas deterministas en `config/prospecting.templates.json`
 
 ### Perfil de marca / firma: `config/prospecting.profile.json`

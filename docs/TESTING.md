@@ -52,8 +52,10 @@ La prueba usa un workspace temporal aislado y verifica con el modelo local real:
 
 - El agente de requisitos y su JSON estructurado.
 - El flujo de producción y QA con `simulate-service`.
-- El agente de prospección, sin enviar mensajes externos.
+- El agente de prospección generado por el LLM, sin enviar mensajes externos.
 - La cotización determinista con los precios vigentes.
+
+Si prospección cae a una plantilla de respaldo, la prueba real falla deliberadamente: el sistema productivo conserva ese respaldo, pero esta verificación debe confirmar el uso real del modelo.
 
 Al final deja un reporte JSON en `%TEMP%\\pwx-real-agent-...\\real-agent-report.json`. Si falla, el script termina con código `1` y reporta el componente que necesita revisión. Esta prueba no usa clientes ni pagos reales.
 

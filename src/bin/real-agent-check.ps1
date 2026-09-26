@@ -1,4 +1,4 @@
-﻿param(
+﻿﻿param(
     [string]$ReportPath = ''
 )
 
@@ -88,7 +88,7 @@ Criterio de aceptación: el archivo resultado.txt existe y no está vacío.
     $usedModel = ($prospecting.source -eq 'llm')
     Set-RealAgentCheck -Name 'Agente de prospección' -Ok $true -Detail "Fuente: $($prospecting.source); borrador: $($outbox.id); enviado: no"
     if (-not $usedModel) {
-        Write-Host '      AVISO: se usó plantilla como respaldo; revisa Ollama si esperabas generación LLM.' -ForegroundColor Yellow
+        throw 'El agente de prospección usó plantilla de respaldo; la prueba real exige una respuesta del LLM.'
     }
 
     $quote = Get-PwxQuote -ServiceId 'excel-service' -Units 3 -Complexity 'advanced' -Addons @('rush') -DiscountPct 5
