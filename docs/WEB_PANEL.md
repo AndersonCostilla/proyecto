@@ -38,11 +38,20 @@ Presiona `Ctrl + C` en PowerShell para detener el servidor.
 - Cola de trabajos con estado y pago asociado.
 - Extracción de requisitos mediante Ollama local.
 - Adjuntar guía, datos o archivos de entrada desde el navegador.
+- Usar el **Asistente Word**: el cliente sube una solicitud `.md`/`.txt`, el modelo local propone preguntas de aclaración, el operador registra respuestas, revisa un borrador y genera un Word temporal.
 - Ejecutar una prueba Word aislada desde el navegador: archivo `.md`/`.txt` UTF-8 de máximo 1 MB, requisitos con Ollama local, producción DOCX, QA, entrega temporal y descarga.
 - Solicitar pago manual a través de un método configurado.
 - Subir comprobante y aprobarlo tras revisión humana.
 
 Los archivos de entrada se limitan a 25 MB. Los comprobantes se limitan a 10 MB y aceptan PNG, JPG, JPEG o PDF.
+
+## Asistente Word: solicitud, preguntas y borrador
+
+La sección **Asistente Word** está diseñada para la fase de preparación de documentos profesionales. El cliente u operador sube una solicitud `.md` o `.txt` UTF-8 de máximo 64 KB con preguntas, temas o actividades. Ollama local analiza el encargo, propone entre tres y ocho preguntas de aclaración y sugiere una estructura. Después de responder, genera un borrador Markdown visible y editable antes de crear el DOCX.
+
+El modelo recibe la instrucción de no inventar hechos, fuentes, cifras o resultados. Los datos no confirmados deben quedar como `Pendiente de confirmar`. El flujo bloquea solicitudes con señales explícitas de trabajos académicos para presentar como propios; puede utilizarse para documentación profesional legítima, informes, propuestas, manuales, diagnósticos, planes y guías autorizadas.
+
+La generación final usa el mismo workspace temporal aislado de la prueba Word. Es una validación local sin cobro: no crea pedidos comerciales, no solicita pagos y no representa un pago como aprobado. Para entregar un servicio comercial real se debe registrar el trabajo, validar requisitos, cotizar, verificar el pago real y pasar por QA dentro del flujo comercial normal.
 
 ## Prueba Word sin cobro
 

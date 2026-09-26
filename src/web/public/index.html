@@ -14,6 +14,7 @@
       <p class="workspace-label">OPERACIONES LOCALES</p>
       <nav class="nav" aria-label="Navegación">
         <a href="#dashboard" class="nav-link active"><span>◈</span>Resumen</a>
+        <a href="#word-wizard" class="nav-link"><span>✦</span>Asistente Word</a>
         <a href="#word-test" class="nav-link"><span>W</span>Prueba Word</a>
         <a href="#requests" class="nav-link"><span>＋</span>Nuevo pedido</a>
         <a href="#jobs" class="nav-link"><span>▤</span>Trabajos</a>
@@ -36,6 +37,22 @@
         <article class="metric"><div class="metric-icon blue">▤</div><div><small>Trabajos</small><strong id="metricJobs">—</strong><span>En el workspace</span></div></article>
         <article class="metric"><div class="metric-icon amber">⌁</div><div><small>Por cobrar</small><strong id="metricPayments">—</strong><span>Con comprobante pendiente</span></div></article>
         <article class="metric"><div class="metric-icon green">✓</div><div><small>Entregados</small><strong id="metricDelivered">—</strong><span>Con entrega aprobada</span></div></article>
+      </section>
+
+      <section id="word-wizard" class="panel wizard-panel" aria-label="Asistente de desarrollo Word">
+        <div class="wizard-heading">
+          <div><p class="eyebrow">ASISTENTE DE DESARROLLO</p><h2>Del encargo del cliente a un borrador revisable</h2><p>Sube las preguntas, temas o actividades que el cliente necesita resolver. El asistente las analiza, te pregunta por los datos necesarios, prepara un borrador y luego lo convierte a Word.</p></div>
+          <span class="step">NUEVO</span>
+        </div>
+        <div class="wizard-policy"><strong>Uso responsable:</strong> para informes, propuestas, planes, manuales y documentos profesionales autorizados. No desarrolla entregas académicas para presentar como trabajo propio. Revisa y aprueba siempre el borrador antes de descargarlo.</div>
+        <form id="wizardAnalyzeForm" class="wizard-start">
+          <label><span>Título orientativo <em>opcional</em></span><input id="wizardTitle" type="text" maxlength="200" placeholder="Ejemplo: plan de mejora operativa" /></label>
+          <label><span>Solicitud del cliente (.md o .txt UTF-8, máximo 64 KB)</span><input id="wizardFile" type="file" accept=".md,.txt,text/markdown,text/plain" required /></label>
+          <button id="wizardAnalyzeSubmit" class="primary" type="submit">1. Analizar solicitud <span>→</span></button>
+        </form>
+        <div id="wizardAnalysis" class="wizard-stage" aria-live="polite"></div>
+        <form id="wizardAnswersForm" class="wizard-stage" aria-live="polite"></form>
+        <form id="wizardDraftForm" class="wizard-stage" aria-live="polite"></form>
       </section>
 
       <section id="word-test" class="panel word-test-panel" aria-label="Prueba local de documento Word">

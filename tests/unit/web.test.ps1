@@ -33,4 +33,15 @@ Run-PwxTest -Name 'panel web tiene archivos públicos y convierte archivos base6
     Assert-PwxThrows {
         Get-PwxWebWordTestInput -Payload ([pscustomobject]@{ fileName = 'salida.docx'; contentBase64 = $wordPayload.contentBase64 }) | Out-Null
     } 'La prueba Word solo debe aceptar Markdown o texto'
+
+    $wizardPayload = [pscustomobject]@{
+        fileName = 'solicitud.md'
+        contentBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("# Informe`n`nPreparar un plan de mejora operativa para una empresa."))
+        title = 'Plan de mejora'
+    }
+    $wizardInput = Get-PwxWebWordWizardInput -Payload $wizardPayload
+    Assert-PwxEqual 'solicitud.md' $wizardInput.file_name
+    Assert-PwxEqual 'Plan de mejora' $wizardInput.title
+    Assert-PwxTrue (-not (Test-PwxWebWordWizardAcademicScope -Text $wizardInput.text)) 'Una solicitud profesional valida no debe bloquearse'
+    Assert-PwxTrue (Test-PwxWebWordWizardAcademicScope -Text 'Necesito una tesis para la universidad') 'La solicitud academica debe detectarse'
 }

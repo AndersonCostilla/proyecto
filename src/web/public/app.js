@@ -97,6 +97,81 @@ async function runWordTest(event) {
     submit.disabled = false;
   }
 }
+function showWizardStage(selector, markup) {
+  const node = $(selector); node.className = 'wizard-stage show'; node.innerHTML = markup;
+}
+function wizardList(items) {
+  const list = Array.isArray(items) ? items : [];
+  return list.length ? `<ul>${list.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p>No se detectaron elementos adicionales.</p>';
+}
+function renderWizardAnalysis(analysis) {
+  const plan = analysis.plan;
+  state.wizard = { sessionId: analysis.session_id, plan, draft: '' };
+  showWizardStage('#wizardAnalysis', `<h3>2. Solicitud analizada</h3><div class="wizard-analysis-grid"><div class="wizard-analysis-card"><strong>Tipo de documento</strong><p>${escapeHtml(plan.document_type)}</p></div><div class="wizard-analysis-card"><strong>Título sugerido</strong><p>${escapeHtml(plan.title)}</p></div><div class="wizard-analysis-card full"><strong>Resumen</strong><p>${escapeHtml(plan.summary)}</p></div><div class="wizard-analysis-card"><strong>Actividades detectadas</strong>${wizardList(plan.tasks)}</div><div class="wizard-analysis-card"><strong>Secciones sugeridas</strong>${wizardList(plan.suggested_sections)}</div></div>`);
+  const fields = (plan.clarifying_questions || []).map(question => `<label class="wizard-question"><span>${escapeHtml(question.question)}</span>${question.help ? `<small>${escapeHtml(question.help)}</small>` : ''}<textarea rows="4" data-wizard-question="${escapeHtml(question.id)}" maxlength="8000" required placeholder="Escribe la respuesta confirmada por el cliente."></textarea></label>`).join('');
+  showWizardStage('#wizardAnswersForm', `<h3>3. Responde las preguntas del cliente</h3><p>Estas respuestas son la base del contenido. Lo que no se confirme se marcará como pendiente; el asistente no debe inventar datos.</p>${fields}<div class="wizard-actions"><button id="wizardDraftSubmit" class="primary" type="submit">Generar borrador para revisión <span>→</span></button><span id="wizardAnswersStatus" class="wizard-status"></span></div>`);
+  $('#wizardAnswersForm').onsubmit = generateWizardDraft;
+  $('#wizardDraftForm').className = 'wizard-stage'; $('#wizardDraftForm').innerHTML = '';
+  document.querySelector('#wizardAnswersForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+async function analyzeWordWizard(event) {
+  event.preventDefault();
+  const submit = $('#wizardAnalyzeSubmit');
+  try {
+    const file = await formFileAsBase64($('#wizardFile'));
+    if (!file) throw new Error('Selecciona la solicitud del cliente en formato .md o .txt');
+    submit.disabled = true;
+    showWizardStage('#wizardAnalysis', '<h3>2. Analizando la solicitud</h3><p>Ollama local está identificando actividades, estructura y datos que se deben confirmar.</p>');
+    $('#wizardAnswersForm').className = 'wizard-stage'; $('#wizardDraftForm').className = 'wizard-stage';
+    const result = await api('/api/word-wizard/analyze', { method: 'POST', body: JSON.stringify({ ...file, title: $('#wizardTitle').value.trim() }) });
+    renderWizardAnalysis(result.analysis);
+    toast('Solicitud analizada. Completa las preguntas para crear el borrador.');
+  } catch (error) {
+    showWizardStage('#wizardAnalysis', `<h3>La solicitud no se pudo analizar</h3><p class="wizard-status error">${escapeHtml(error.message)}</p>`);
+    toast(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+}
+async function generateWizardDraft(event) {
+  event.preventDefault();
+  if (!state.wizard) return;
+  const submit = $('#wizardDraftSubmit');
+  try {
+    const answers = [...document.querySelectorAll('[data-wizard-question]')].map(input => ({ id: input.dataset.wizardQuestion, answer: input.value.trim() }));
+    submit.disabled = true; $('#wizardAnswersStatus').textContent = 'Redactando el borrador con Ollama local…';
+    const result = await api('/api/word-wizard/draft', { method: 'POST', body: JSON.stringify({ sessionId: state.wizard.sessionId, answers }) });
+    state.wizard.draft = result.draft.draft;
+    showWizardStage('#wizardDraftForm', `<h3>4. Revisa y edita el borrador</h3><p>Comprueba nombres, datos, actividades y afirmaciones antes de generar el Word. Puedes editar directamente el texto.</p><textarea id="wizardDraftContent" class="wizard-draft" maxlength="200000">${escapeHtml(result.draft.draft)}</textarea><div class="wizard-actions"><button id="wizardDeliverSubmit" class="primary" type="submit">Generar Word revisado <span>→</span></button><span id="wizardDeliveryStatus" class="wizard-status">Esta salida es una prueba local aislada; no crea un cobro comercial.</span></div>`);
+    $('#wizardDraftForm').onsubmit = deliverWordWizard;
+    document.querySelector('#wizardDraftForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    toast('Borrador creado. Revísalo antes de generar el Word.');
+  } catch (error) {
+    $('#wizardAnswersStatus').textContent = error.message; $('#wizardAnswersStatus').className = 'wizard-status error';
+    toast(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+}
+async function deliverWordWizard(event) {
+  event.preventDefault();
+  if (!state.wizard) return;
+  const submit = $('#wizardDeliverSubmit');
+  const status = $('#wizardDeliveryStatus');
+  try {
+    submit.disabled = true; status.className = 'wizard-status'; status.textContent = 'Validando requisitos, generando DOCX y ejecutando QA…';
+    const result = await api('/api/word-wizard/deliver', { method: 'POST', body: JSON.stringify({ sessionId: state.wizard.sessionId, draft: $('#wizardDraftContent').value.trim() }) });
+    const delivery = result.delivery;
+    status.innerHTML = `Listo: <strong>${escapeHtml(delivery.state)}</strong>, QA <strong>${escapeHtml(delivery.qa)}</strong>. <a href="${escapeHtml(delivery.download_url)}">Descargar documento Word (.docx)</a>`;
+    toast('Documento Word generado y validado.');
+    await load();
+  } catch (error) {
+    status.textContent = error.message; status.className = 'wizard-status error';
+    toast(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+}
 function formFileAsBase64(input) {
   const file = input.files?.[0];
   if (!file) return Promise.resolve(null);
@@ -138,6 +213,7 @@ async function approvePayment(jobId) {
 }
 
 $('#refreshBtn').addEventListener('click', load);
+$('#wizardAnalyzeForm').addEventListener('submit', analyzeWordWizard);
 $('#wordTestForm').addEventListener('submit', runWordTest);
 $('#requestForm').addEventListener('submit', createRequest);
 $('#quoteForm').addEventListener('submit', calculateQuote);

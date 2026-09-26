@@ -306,6 +306,241 @@ function Send-PwxWebWordTestDownload {
     $Context.Response.Close()
 }
 
+# The wizard collects client-provided facts first, drafts only professional content,
+# and then reuses the isolated Word validation path for the final DOCX.
+$script:PwxWebWordWizardMaxBytes = 65536
+$script:PwxWebWordWizardSessions = @{}
+
+function Test-PwxWebWordWizardAcademicScope {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+    $markers = @(
+        '(?i)\btesis\b',
+        '(?i)\bmonografia\b',
+        '(?i)trabajo\s+academico',
+        '(?i)ensayo\s+academico',
+        '(?i)entrega\s+universitaria',
+        '(?i)\bcalificacion\b',
+        '(?i)\bnota\s+final\b',
+        '(?i)\bexamen\b',
+        '(?i)\bparcial\b',
+        '(?i)\bhomework\b'
+    )
+    return [bool]($markers | Where-Object { $Text -match $_ } | Select-Object -First 1)
+}
+
+function Get-PwxWebWordWizardInput {
+    param([Parameter(Mandatory)][object]$Payload)
+    $fileName = Get-PwxWebString -Object $Payload -Property 'fileName'
+    $extension = [System.IO.Path]::GetExtension($fileName).ToLowerInvariant()
+    if ($extension -notin @('.md', '.txt')) {
+        throw 'El asistente acepta una solicitud en formato .md o .txt UTF-8'
+    }
+    Assert-PwxSafeFileName -Name $fileName | Out-Null
+    $bytes = ConvertFrom-PwxWebBase64 -Base64 (Get-PwxWebString -Object $Payload -Property 'contentBase64') -MaxBytes $script:PwxWebWordWizardMaxBytes
+    $text = [System.Text.Encoding]::UTF8.GetString($bytes).Trim()
+    if ($text.Length -lt 20) { throw 'La solicitud debe contener al menos 20 caracteres' }
+    if (Test-PwxWebWordWizardAcademicScope -Text $text) {
+        throw 'El asistente no desarrolla entregas academicas para presentar como trabajo propio. Puede ayudar con estudio, explicaciones o retroalimentacion.'
+    }
+    return [pscustomobject]@{
+        file_name = $fileName
+        text      = $text
+        title     = (Get-PwxWebString -Object $Payload -Property 'title').Trim()
+    }
+}
+
+function Clear-PwxWebExpiredWordWizardSessions {
+    $cutoff = (Get-Date).AddHours(-24)
+    foreach ($sessionId in @($script:PwxWebWordWizardSessions.Keys)) {
+        if ([datetime]$script:PwxWebWordWizardSessions[$sessionId].created_at -lt $cutoff) {
+            $script:PwxWebWordWizardSessions.Remove($sessionId)
+        }
+    }
+}
+
+function Get-PwxWebWordWizardSession {
+    param([Parameter(Mandatory)][string]$SessionId)
+    Clear-PwxWebExpiredWordWizardSessions
+    if (-not $script:PwxWebWordWizardSessions.ContainsKey($SessionId)) {
+        throw 'La sesion no existe o vencio. Analiza nuevamente la solicitud.'
+    }
+    return $script:PwxWebWordWizardSessions[$SessionId]
+}
+
+function ConvertTo-PwxWebWordWizardPlan {
+    param([Parameter(Mandatory)][object]$Plan, [Parameter(Mandatory)][string]$FallbackTitle)
+    $documentType = Get-PwxWebString -Object $Plan -Property 'document_type'
+    if (-not $documentType) { $documentType = 'Documento profesional' }
+    $title = Get-PwxWebString -Object $Plan -Property 'title'
+    if (-not $title) { $title = $FallbackTitle }
+    if (-not $title) { $title = 'Documento profesional' }
+    $summary = Get-PwxWebString -Object $Plan -Property 'summary'
+    if (-not $summary) { $summary = 'Solicitud analizada para crear un documento profesional.' }
+
+    $tasks = @()
+    $taskProp = $Plan.PSObject.Properties['tasks']
+    if ($taskProp -and $taskProp.Value) {
+        $tasks = @($taskProp.Value | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 12)
+    }
+    $sections = @()
+    $sectionProp = $Plan.PSObject.Properties['suggested_sections']
+    if ($sectionProp -and $sectionProp.Value) {
+        $sections = @($sectionProp.Value | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -First 12)
+    }
+
+    $questions = @()
+    $questionProp = $Plan.PSObject.Properties['clarifying_questions']
+    if ($questionProp -and $questionProp.Value) {
+        $index = 0
+        foreach ($item in @($questionProp.Value | Select-Object -First 10)) {
+            $question = Get-PwxWebString -Object $item -Property 'question'
+            if (-not $question) { continue }
+            $help = Get-PwxWebString -Object $item -Property 'help'
+            $index++
+            $questions += [pscustomobject]@{ id = "q$index"; question = $question; help = $help }
+        }
+    }
+    if ($questions.Count -eq 0) {
+        $questions = @(
+            [pscustomobject]@{ id = 'q1'; question = 'Cual es el objetivo principal del documento?'; help = 'Indica el resultado esperado.' },
+            [pscustomobject]@{ id = 'q2'; question = 'Quien leera el documento y que debe decidir o hacer?'; help = 'Describe el publico y el siguiente paso.' },
+            [pscustomobject]@{ id = 'q3'; question = 'Que datos, hechos o instrucciones deben aparecer obligatoriamente?'; help = 'No incluyas informacion privada innecesaria.' },
+            [pscustomobject]@{ id = 'q4'; question = 'Que actividades, responsables o plazos deben proponerse?'; help = 'Indica lo que ya esta confirmado.' }
+        )
+    }
+
+    return [pscustomobject]@{
+        document_type       = $documentType
+        title               = $title.Substring(0, [Math]::Min(200, $title.Length))
+        summary             = $summary
+        tasks               = $tasks
+        suggested_sections  = $sections
+        clarifying_questions = $questions
+    }
+}
+
+function Invoke-PwxWebWordWizardAnalysis {
+    param([Parameter(Mandatory)][object]$Payload)
+    Clear-PwxWebExpiredWordWizardSessions
+    $brief = Get-PwxWebWordWizardInput -Payload $Payload
+    $model = (Get-PwxConfig).Model
+    if ((Test-PwxModelAvailable -Model $model) -ne 'OK') {
+        throw 'Ollama o el modelo configurado no esta disponible para analizar la solicitud'
+    }
+
+    $system = @'
+Eres un analista de requisitos para documentos profesionales legitimos. Analiza una solicitud de un cliente, pero no la desarrolles todavia. Devuelve SOLO JSON valido con esta estructura:
+{
+  "document_type":"tipo de documento",
+  "title":"titulo profesional sugerido",
+  "summary":"resumen breve",
+  "tasks":["actividades o respuestas que debe cubrir el documento"],
+  "clarifying_questions":[{"question":"pregunta concreta para el cliente","help":"dato que se necesita"}],
+  "suggested_sections":["secciones del documento"]
+}
+Haz entre 3 y 8 preguntas solo cuando la respuesta aporte datos necesarios. No inventes hechos, fuentes, cifras, nombres ni resultados. No generes trabajos academicos para que se presenten como propios.
+'@
+    $prompt = "Solicitud recibida en $($brief.file_name):`n---`n$($brief.text)`n---`nAnaliza la solicitud y prepara el cuestionario para el cliente."
+    $result = Invoke-PwxOllamaChat -Prompt $prompt -System $system -Model $model -FormatJson $true -Temperature 0.1
+    if (-not $result.ok) { throw "No se pudo analizar la solicitud: $($result.code) $($result.error)" }
+    $parsed = ConvertFrom-PwxOllamaJson -Text $result.content
+    if ($null -eq $parsed) { throw 'El modelo no devolvio un plan JSON valido. Vuelve a intentar el analisis.' }
+    $plan = ConvertTo-PwxWebWordWizardPlan -Plan $parsed -FallbackTitle $brief.title
+    $sessionId = [guid]::NewGuid().ToString('N')
+    $script:PwxWebWordWizardSessions[$sessionId] = [pscustomobject]@{
+        created_at = Get-Date
+        brief      = $brief
+        plan       = $plan
+        draft      = ''
+    }
+    return [ordered]@{ session_id = $sessionId; plan = $plan; expires_at = (Get-Date).AddHours(24).ToString('o') }
+}
+
+function Get-PwxWebWordWizardAnswers {
+    param([Parameter(Mandatory)][object]$Payload, [Parameter(Mandatory)][object]$Session)
+    $prop = $Payload.PSObject.Properties['answers']
+    if (-not $prop -or -not $prop.Value) { throw 'Responde al menos una pregunta antes de generar el borrador' }
+    $submitted = @{}
+    foreach ($entry in @($prop.Value)) {
+        $id = Get-PwxWebString -Object $entry -Property 'id'
+        $answer = (Get-PwxWebString -Object $entry -Property 'answer').Trim()
+        if (-not $id -or -not $answer) { continue }
+        if ($answer.Length -gt 8000) { throw 'Cada respuesta debe tener menos de 8000 caracteres' }
+        $submitted[$id] = $answer
+    }
+    if ($submitted.Count -eq 0) { throw 'Responde al menos una pregunta antes de generar el borrador' }
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($question in @($Session.plan.clarifying_questions)) {
+        $answer = if ($submitted.ContainsKey($question.id)) { $submitted[$question.id] } else { 'Pendiente de confirmar por el cliente.' }
+        [void]$lines.Add("Pregunta: $($question.question)")
+        [void]$lines.Add("Respuesta: $answer")
+        [void]$lines.Add('')
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function Invoke-PwxWebWordWizardDraft {
+    param([Parameter(Mandatory)][object]$Payload)
+    $sessionId = Get-PwxWebString -Object $Payload -Property 'sessionId'
+    if (-not $sessionId) { throw 'Falta sessionId' }
+    $session = Get-PwxWebWordWizardSession -SessionId $sessionId
+    $answers = Get-PwxWebWordWizardAnswers -Payload $Payload -Session $session
+    $model = (Get-PwxConfig).Model
+    if ((Test-PwxModelAvailable -Model $model) -ne 'OK') {
+        throw 'Ollama o el modelo configurado no esta disponible para redactar el borrador'
+    }
+
+    $system = @'
+Eres un redactor de documentos profesionales para servicios legitimos. Redacta un borrador en Markdown claro y completo a partir de la solicitud y las respuestas autorizadas del cliente. Usa titulos, subtitulos, parrafos y listas cuando ayuden. Incluye actividades, responsables o proximos pasos solo si estan sustentados por la informacion recibida. Cuando falte un dato importante, escribe "Pendiente de confirmar" en vez de inventarlo. No inventes fuentes, citas, cifras, experiencias ni resultados. No redactes entregas academicas para que se presenten como trabajo propio. Devuelve solamente el Markdown final, sin bloques de codigo ni comentarios al lector.
+'@
+    $prompt = @"
+Titulo sugerido: $($session.plan.title)
+Tipo: $($session.plan.document_type)
+
+Solicitud original:
+---
+$($session.brief.text)
+---
+
+Preguntas y respuestas del cliente:
+---
+$answers
+---
+
+Redacta un documento profesional listo para revision humana.
+"@
+    $result = Invoke-PwxOllamaChat -Prompt $prompt -System $system -Model $model -Temperature 0.2
+    if (-not $result.ok) { throw "No se pudo redactar el borrador: $($result.code) $($result.error)" }
+    $draft = $result.content.Trim()
+    $draft = $draft -replace '^\s*```(?:markdown|md)?\s*', ''
+    $draft = $draft -replace '\s*```\s*$', ''
+    if ($draft.Length -lt 100) { throw 'El borrador generado es demasiado corto. Completa mas respuestas y vuelve a intentar.' }
+    if ($draft.Length -gt 200000) { throw 'El borrador supera el limite permitido' }
+    $session.draft = $draft
+    $script:PwxWebWordWizardSessions[$sessionId] = $session
+    return [ordered]@{ session_id = $sessionId; title = $session.plan.title; draft = $draft }
+}
+
+function Invoke-PwxWebWordWizardDelivery {
+    param([Parameter(Mandatory)][object]$Payload)
+    $sessionId = Get-PwxWebString -Object $Payload -Property 'sessionId'
+    if (-not $sessionId) { throw 'Falta sessionId' }
+    $session = Get-PwxWebWordWizardSession -SessionId $sessionId
+    $draft = (Get-PwxWebString -Object $Payload -Property 'draft').Trim()
+    if (-not $draft) { $draft = $session.draft }
+    if ($draft.Length -lt 100) { throw 'Revisa o genera un borrador antes de crear el Word' }
+    if ($draft.Length -gt 200000) { throw 'El borrador supera el limite permitido' }
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($draft)
+    $result = Invoke-PwxWebWordTest -Payload ([pscustomobject]@{
+        fileName = 'borrador-profesional.md'
+        contentBase64 = [System.Convert]::ToBase64String($bytes)
+        title = $session.plan.title
+    })
+    return $result
+}
+
 function Add-PwxWebPaymentProof {
     param([Parameter(Mandatory)][string]$JobId, [Parameter(Mandatory)][object]$Payload)
     $fileName = Get-PwxWebString -Object $Payload -Property 'fileName'
@@ -367,6 +602,24 @@ function Invoke-PwxWebApi {
     $request = $Context.Request
     $method = $request.HttpMethod.ToUpperInvariant()
     try {
+        if ($method -eq 'POST' -and $Path -eq '/api/word-wizard/analyze') {
+            $body = Get-PwxWebRequestJson -Request $request
+            $analysis = Invoke-PwxWebWordWizardAnalysis -Payload $body
+            Send-PwxWebJson -Context $Context -Object ([ordered]@{ ok = $true; analysis = $analysis }) -StatusCode 201
+            return
+        }
+        if ($method -eq 'POST' -and $Path -eq '/api/word-wizard/draft') {
+            $body = Get-PwxWebRequestJson -Request $request
+            $draft = Invoke-PwxWebWordWizardDraft -Payload $body
+            Send-PwxWebJson -Context $Context -Object ([ordered]@{ ok = $true; draft = $draft })
+            return
+        }
+        if ($method -eq 'POST' -and $Path -eq '/api/word-wizard/deliver') {
+            $body = Get-PwxWebRequestJson -Request $request
+            $delivery = Invoke-PwxWebWordWizardDelivery -Payload $body
+            Send-PwxWebJson -Context $Context -Object ([ordered]@{ ok = $true; delivery = $delivery }) -StatusCode 201
+            return
+        }
         if ($method -eq 'GET' -and $Path -match '^/api/word-tests/([A-Za-z0-9]+)/download$') {
             Send-PwxWebWordTestDownload -Context $Context -RunId $matches[1]
             return
