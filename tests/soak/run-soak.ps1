@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath $InputPath)) {
     throw "InputPath no existe: $InputPath"
 }
 
-$ws = Join-Path $env:TEMP ("pwx-soak-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
+$ws = Join-Path ([System.IO.Path]::GetTempPath()) ("pwx-soak-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 $env:PWX_WORKSPACE = $ws
 $env:PWX_ROOT = $script:SoakRoot
 . (Join-Path $script:SoakRoot 'src\bootstrap.ps1')
@@ -45,7 +45,7 @@ function Invoke-PwxSoakRun {
     )
     $cliArgs = @('-InputPath', $InputFile, '-Model', $ModelName, '-ClientName', $ClientName)
     if ($NoApprove) { $cliArgs += '-NoApproveDelivery' }
-    $raw = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $script:RunnerCli @cliArgs 2>&1)
+    $raw = @(& (Get-PwxShellExe) -NoProfile -ExecutionPolicy Bypass -File $script:RunnerCli @cliArgs 2>&1)
     return [pscustomobject]@{
         ExitCode = [int]$LASTEXITCODE
         Output   = (($raw -join "`n") -replace "`r", '')
@@ -54,7 +54,7 @@ function Invoke-PwxSoakRun {
 
 function Approve-PwxSoakJob {
     param([string]$JobId)
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $script:PwxCli job:approvedeliver -JobId $JobId -By soak 2>&1 | Out-Null
+    & (Get-PwxShellExe) -NoProfile -ExecutionPolicy Bypass -File $script:PwxCli job:approvedeliver -JobId $JobId -By soak 2>&1 | Out-Null
     return [int]$LASTEXITCODE
 }
 

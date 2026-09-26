@@ -41,6 +41,12 @@ function Get-PwxConfig {
     }
 }
 
+function Get-PwxShellExe {
+    # Ejecutable de PowerShell para invocaciones de subproceso (cross-platform).
+    if ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows) { return 'powershell' }
+    return 'pwsh'
+}
+
 function Get-PwxTimestamp {
     return (Get-Date).ToString('o')
 }

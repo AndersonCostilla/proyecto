@@ -129,6 +129,13 @@ function Get-PwxJsonFile {
         return $null
     }
     try {
+        # PS 6+ convierte fechas ISO a [DateTime] al leer JSON (PS 5.1 las dejaba
+        # como string). Conservamos el string original: los manifiestos y registros
+        # son datos auditables, no objetos de fecha (los asserts dependen del "Z" final).
+        $cmd = Get-Command ConvertFrom-Json -ErrorAction Stop
+        if ($cmd.Parameters.ContainsKey('DateKind')) {
+            return ($text | ConvertFrom-Json -DateKind String)
+        }
         return ($text | ConvertFrom-Json)
     }
     catch {

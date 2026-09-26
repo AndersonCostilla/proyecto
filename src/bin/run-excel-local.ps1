@@ -17,7 +17,7 @@ $env:PWX_MODEL = $Model
 
 function Invoke-PwxCli {
     param([string[]]$CliArgs)
-    $raw = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $script:PwxCli @CliArgs 2>&1)
+    $raw = @(& (Get-PwxShellExe) -NoProfile -ExecutionPolicy Bypass -File $script:PwxCli @CliArgs 2>&1)
     $errors = @($raw | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
     $text = @($raw | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] })
     return [pscustomobject]@{

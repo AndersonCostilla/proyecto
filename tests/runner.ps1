@@ -6,7 +6,7 @@ if (-not $global:PwxTestsDir) {
 if (-not $global:PwxRepoRoot) {
     $global:PwxRepoRoot = Split-Path -Parent $global:PwxTestsDir
 }
-[string]$global:PwxTestRoot = Join-Path $env:TEMP 'pwx-tests'
+[string]$global:PwxTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'pwx-tests'
 [string]$global:PwxCurrentTestWorkspace = ''
 
 $global:PwxPassed = 0

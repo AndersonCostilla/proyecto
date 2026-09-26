@@ -9,7 +9,7 @@
     Assert-PwxEqual 2 $res.exported 'Se exportan 2 borradores'
     Assert-PwxEqual 0 $res.omitted.count 'No hay omitidos'
     Assert-PwxTrue (Test-Path -LiteralPath $res.path) 'El archivo CSV existe'
-    Assert-PwxTrue ($res.path -like '*exports\outbox-drafts-*.csv') 'Nombre por defecto bajo workspace/exports'
+    Assert-PwxTrue (($res.path -replace '\\','/') -like '*exports/outbox-drafts-*.csv') 'Nombre por defecto bajo workspace/exports'
     $rows = @(Import-Csv -LiteralPath $res.path -Encoding UTF8)
     Assert-PwxEqual 2 $rows.Count 'Dos filas'
     Assert-PwxEqual $e.id $rows[0].id 'Primer id'
@@ -59,7 +59,7 @@ Run-PwxTest -Name 'export preserva comas comillas y saltos de linea en body' -Fi
     $body = "Hola,`nesto tiene, comas `"cita`"`ny un salto`nfin."
     $item = New-PwxOutboxItem -Type 'message' -Channel 'email' -Recipient 'ok@mail.com' -Subject 'suj,eto' -Body $body
     $res = Export-PwxOutboxCsv -Path 'con-comas.csv'
-    Assert-PwxTrue ($res.path -like '*exports\con-comas.csv') 'Path relativo dentro de exports'
+    Assert-PwxTrue (($res.path -replace '\\','/') -like '*exports/con-comas.csv') 'Path relativo dentro de exports'
     $rows = @(Import-Csv -LiteralPath $res.path -Encoding UTF8)
     Assert-PwxEqual 1 $rows.Count 'Una fila'
     Assert-PwxEqual $item.recipient $rows[0].recipient 'Recipient'

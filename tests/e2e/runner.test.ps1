@@ -22,7 +22,7 @@ Run-PwxTest -Name 'Runner: run-excel-local.ps1 entrega en workspace temporal (ma
     $env:PWX_WORKSPACE = $ws
     Invoke-PwxBootstrap
 
-    $raw = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $script:RunnerCli -InputPath $script:RunnerFixture -Model 'pwx-no-such-model-runner' -ClientName 'RunnerE2E' 2>&1)
+    $raw = @(& (Get-PwxShellExe) -NoProfile -ExecutionPolicy Bypass -File $script:RunnerCli -InputPath $script:RunnerFixture -Model 'pwx-no-such-model-runner' -ClientName 'RunnerE2E' 2>&1)
     $exit = [int]$LASTEXITCODE
     Assert-PwxEqual 0 $exit 'run-excel-local debe terminar con exit 0'
 
