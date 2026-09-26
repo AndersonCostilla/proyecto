@@ -28,6 +28,17 @@ function Get-PwxConfig {
         $catalogPath = Join-Path $root $catalogPath
     }
 
+    $requirePayment = $true
+    if ($cfg.payments -and $null -ne $cfg.payments.requireApprovalBeforeProduction) {
+        $requirePayment = [bool]$cfg.payments.requireApprovalBeforeProduction
+    }
+    if ($env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION) {
+        $rawPaymentPolicy = $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION.Trim().ToLowerInvariant()
+        if ($rawPaymentPolicy -in @('0', 'false', 'no', 'off')) { $requirePayment = $false }
+        elseif ($rawPaymentPolicy -in @('1', 'true', 'yes', 'on')) { $requirePayment = $true }
+        else { throw "PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION inválido: $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION" }
+    }
+
     return [pscustomobject]@{
         Root               = $root
         WorkspacePath      = [System.IO.Path]::GetFullPath($workspace)
@@ -38,6 +49,7 @@ function Get-PwxConfig {
         Currency           = $cfg.currency
         LogLevel           = $cfg.logLevel
         ServiceCatalogPath = $catalogPath
+        RequirePaymentBeforeProduction = $requirePayment
     }
 }
 

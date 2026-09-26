@@ -82,7 +82,9 @@ function Run-PwxTest {
     )
     $global:PwxTestsRun++
     $tempWs = New-PwxTestWorkspace
+    $previousPaymentPolicy = $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION
     $env:PWX_WORKSPACE = $tempWs
+    $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION = 'false'
     try {
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         & $Body
@@ -102,6 +104,7 @@ function Run-PwxTest {
     }
     finally {
         $env:PWX_WORKSPACE = $null
+        $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION = $previousPaymentPolicy
     }
 }
 

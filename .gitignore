@@ -18,3 +18,6 @@ node_modules/
 # Archivos locales de prueba (leads)
 mi-lista.csv
 
+
+# Configuración privada de cobros
+config/payment-methods.local.json

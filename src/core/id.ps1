@@ -39,3 +39,10 @@ function Get-PwxJobId {
 function Get-PwxOutboxId {
     return (New-PwxSequenceId -Prefix 'M')
 }
+function Get-PwxQuoteId {
+    return (New-PwxSequenceId -Prefix 'Q')
+}
+
+function Get-PwxPaymentId {
+    return (New-PwxSequenceId -Prefix 'P')
+}

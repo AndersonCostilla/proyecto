@@ -159,6 +159,7 @@ function New-PwxJob {
         updated_at  = Get-PwxTimestamp
         requirements = $null
         price        = $price
+        payment_id   = $null
         output_version = 0
         versions     = @()
         files        = [ordered]@{
