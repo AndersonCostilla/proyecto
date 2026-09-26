@@ -34,9 +34,14 @@ proyecto/
       requirements.ps1     # extrae especificacion JSON, la valida y conforma
       production.ps1       # orquesta produccion + QA determinista
     services/              # servicios de entrega deterministas
+      common.ps1           # resolucion de entrada de texto + helpers compartidos
       registry.ps1         # catalogo e "implementado"
       simulate.ps1         # motor determinista de prueba (genera resultado.txt)
-      excel.ps1 word.ps1 pdf.ps1 data.ps1 construction.ps1   # stubs
+      excel.ps1            # xlsx: normaliza input y valida contra el original
+      word.ps1             # docx OOXML determinista (fallback a la solicitud)
+      pdf.ps1              # PDF 1.4 con xref byte-precisa (fallback a la solicitud)
+      data.ps1             # CSV RFC4180: limpieza + informe consistente
+      construction.ps1     # computos de obra -> presupuesto.xlsx con totales
     bin/
       pwx.ps1              # CLI (subcomandos de clientes, trabajos, servicios, outbox)
       demo.ps1             # demo completa del ciclo con Ollama real
@@ -72,7 +77,7 @@ Transiciones definidas en `src/core/state.ps1` (`$PwxStateTransitions`). `Set-Pw
 4. `job:produce` -> agente de produccion:
    - `READY_FOR_PRODUCTION -> IN_PROGRESS`.
    - Invoca la funcion determinista del servicio (`Invoke-PwxService_<id>`).
-   - Si el servicio no esta implementado -> `BLOCKED` con `SERVICE_NOT_IMPLEMENTED`.
+   - Si el servicio no esta implementado -> `BLOCKED` con `SERVICE_NOT_IMPLEMENTED` (hoy ninguno: los 6 estan activos).
    - Ejecuta QA determinista (`Invoke-PwxQa`): carpeta de salida, no vacia, patrones requeridos, archivos no vacios.
    - QA PASS -> `QA -> READY_FOR_DELIVERY`; QA FAIL -> `REWORK`.
 5. `job:deliver` -> copia `output/` a `delivery/` y escribe `delivery/manifest.json` (estandar) + `delivery/checksums.sha256` con sha256 por archivo (ver `docs/DELIVERY_FORMAT.md`). Rechaza sin QA PASS (o `-AllowFail` en pruebas).
@@ -102,7 +107,7 @@ Sin Pester ni dependencias. `tests/runner.ps1` provee `Run-PwxTest`, `Assert-Pwx
 
 ## Limitaciones conocidas
 
-- Solo `simulate-service` esta implementado; el resto son stubs y devuelven `SERVICE_NOT_IMPLEMENTED`.
+- Los 6 servicios del catalogo estan implementados y cubiertos por tests; si uno se desactiva (`implemented: false`), el trabajo cae a BLOCKED con `SERVICE_NOT_IMPLEMENTED`.
 - No hay envio real por email/WhatsApp; el outbox persiste estados (DRAFT/APPROVED/SENT) sin transport.
 - No hay autorizacion por rol ni multiusuario; "aprobacion" es un campo de texto.
 - Sin pagos reales ni cobro.

@@ -11,7 +11,7 @@ Reglas:
 1. NUNCA inventes precios, IDs, estados ni archivos. Todo eso lo calcula el codigo determinista (catalogo y store). Tu rol es razonamiento, lenguaje y clasificacion.
 2. Para conocer el estado, usa la CLI: `powershell -ExecutionPolicy Bypass -File src\bin\pwx.ps1 <comando>`.
 3. Flujo canónico de un trabajo: cliente -> trabajo (NEW) -> requisitos (REQUIREMENTS -> READY_FOR_PRODUCTION) -> produccion (IN_PROGRESS -> QA -> READY_FOR_DELIVERY) -> entrega (DELIVERED -> COMPLETED). Estados extra: BLOCKED, REWORK, CANCELLED.
-4. Si un servicio no esta implementado, el trabajo queda BLOCKED con SERVICE_NOT_IMPLEMENTED. Solo `simulate-service` esta implementado en esta fase.
+4. Si un servicio no esta implementado, el trabajo queda BLOCKED con SERVICE_NOT_IMPLEMENTED. Los 6 servicios del catalogo estan implementados (simulate, excel, word, pdf, data, construction).
 5. El QA es determinista: PASS solo si los checks de salida pasan. Nunca declares un trabajo listo para entregar sin QA PASS.
 6. Los mensajes de outbox requieren aprobacion humana (DRAFT -> APPROVED -> SENT).
 7. Los precios vienen del catalogo en config/services.json; jamas los calcules tu.

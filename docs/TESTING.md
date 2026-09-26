@@ -5,7 +5,7 @@ declarar un trabajo listo para entrega (READY FOR COMMIT / READY FOR DELIVERY).
 
 ## Requisitos
 
-- Windows con PowerShell
+- PowerShell 5.1+ (Windows) o PowerShell 7.x (Linux/macOS)
 - Repositorio clonado en la corriente raíz (los tests asumen que se ejecutan desde `tests/`)
 - (Opcional) Ollama local en `http://localhost:11434` con el modelo de configuración
   (default `qwen3:8b`). Si no está disponible, los tests se ejecutan en modo plantilla (sin LLM).
@@ -19,7 +19,7 @@ declarar un trabajo listo para entrega (READY FOR COMMIT / READY FOR DELIVERY).
 | `tests/soak/run-soak.ps1` | Prueba de estrés/robustez (muchas entregas consecutivas)      |
 | `tests/runner.ps1`      | Harness de asserts y utilidades compartidas                     |
 
-Cada test corre en un **workspace temporal** bajo `$env:TEMP` y se limpia al terminar. El workspace
+Cada test corre en un **workspace temporal** bajo el directorio temporal del sistema (`GetTempPath()`) y se limpia al terminar. El workspace
 del repositorio (`store/`, según `config/settings.json`) nunca se toca durante los tests.
 
 ## Suites

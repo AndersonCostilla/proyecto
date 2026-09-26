@@ -4,7 +4,7 @@ Sistema multiagente local para procesar trabajos comerciales digitales (planilla
 
 ## Requisitos
 
-- Windows con PowerShell 5.1 o superior (compatible con PowerShell 7.x)
+- PowerShell 5.1+ en Windows, o PowerShell 7.x (Linux / macOS / Windows)
 - [Ollama](https://ollama.com) corriendo en `http://localhost:11434`
 - Modelo LLM local (configurado por defecto: `qwen3:8b`)
 
@@ -66,7 +66,8 @@ client:new / client:list / client:show
 job:new / job:show / job:list / job:requisitos / job:input / job:produce / job:qa
 job:deliver / job:approvedeliver / job:state / job:note
 services:list / price:calc
-outbox:new / outbox:show / outbox:list / outbox:approve / outbox:send
+outbox:new / outbox:show / outbox:list / outbox:approve / outbox:send / outbox:export
+lead:new / lead:import / lead:import-socrata / lead:list / lead:dedupe / lead:score / lead:draft / lead:convert
 config:show / ollama:check
 ```
 
@@ -78,13 +79,19 @@ config:show / ollama:check
 
 ## Arquitectura
 
-Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Contratos de entrada/salida de cada servicio: [docs/SERVICES.md](docs/SERVICES.md).
 
 ## Estado de los servicios
 
-| Servicio | Estado |
-| --- | --- |
-| simulate-service | Implementado (salida determinista de prueba) |
-| excel-service / word-service / pdf-service / data-service / construction-service | Stubs (retornan `SERVICE_NOT_IMPLEMENTED`) |
+| Servicio | Estado | Entrada -> Salida |
+| --- | --- | --- |
+| simulate-service | Implementado (salida determinista de prueba) | genera `resultado.txt` |
+| excel-service | Implementado | `job/input/*.xlsx` -> `resultado-normalizado.xlsx` |
+| word-service | Implementado | `job/input/*.txt|md` (o la solicitud) -> `documento.docx` |
+| pdf-service | Implementado | `job/input/*.txt|md` (o la solicitud) -> `documento.pdf` |
+| data-service | Implementado | `job/input/*.csv` -> `datos-limpios.csv` + `informe-limpieza.txt` |
+| construction-service | Implementado | `job/input/*.csv` de partidas -> `presupuesto.xlsx` |
 
-Los precios siempre se calculan de forma determinista desde el catalogo; el LLM nunca inventa precios.
+Todos los servicios son deterministas: mismo input -> mismos bytes de salida, y el QA valida
+la salida contra la fuente antes de permitir la entrega. Los precios siempre se calculan
+desde el catalogo; el LLM nunca inventa precios.
