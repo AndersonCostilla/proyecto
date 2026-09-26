@@ -44,4 +44,15 @@ Gracias por considerar nuestra propuesta.
     $docx = Get-ChildItem -LiteralPath $outputDir -Filter '*.docx' -File
     Assert-PwxEqual 1 @($docx).Count
     Assert-PwxTrue ($docx[0].Length -gt 0) 'El documento Word no puede estar vacío'
+    Initialize-PwxWordTypes
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($docx[0].FullName)
+    try {
+        $entry = $zip.Entries | Where-Object { $_.FullName -eq 'word/document.xml' } | Select-Object -First 1
+        $reader = New-Object System.IO.StreamReader($entry.Open(), [System.Text.Encoding]::UTF8)
+        try { $documentXml = $reader.ReadToEnd() }
+        finally { $reader.Dispose() }
+        Assert-PwxTrue ($documentXml -match '&#x2022;') 'Las viñetas deben usar entidad XML segura'
+        Assert-PwxTrue ($documentXml -notmatch 'â€¢') 'No debe escribir viñetas mal codificadas'
+    }
+    finally { $zip.Dispose() }
 }

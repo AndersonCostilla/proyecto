@@ -16,10 +16,11 @@ function ConvertTo-PwxWordXmlText {
 function ConvertTo-PwxWordParagraphXml {
     param(
         [Parameter(Mandatory)][string]$Text,
-        [string]$Style = 'Normal'
+        [string]$Style = 'Normal',
+        [string]$PrefixXml = ''
     )
     $safe = ConvertTo-PwxWordXmlText -Text $Text
-    return ('<w:p><w:pPr><w:pStyle w:val="{0}"/></w:pPr><w:r><w:t xml:space="preserve">{1}</w:t></w:r></w:p>' -f $Style, $safe)
+    return ('<w:p><w:pPr><w:pStyle w:val="{0}"/></w:pPr><w:r><w:t xml:space="preserve">{1}{2}</w:t></w:r></w:p>' -f $Style, $PrefixXml, $safe)
 }
 
 function ConvertTo-PwxWordDocumentBody {
@@ -33,11 +34,18 @@ function ConvertTo-PwxWordDocumentBody {
         if (-not $trimmed) { continue }
         $style = 'Normal'
         $content = $trimmed
+        $prefixXml = ''
         if ($trimmed -match '^###\s+(.+)$') { $style = 'Heading2'; $content = $matches[1].Trim() }
         elseif ($trimmed -match '^##\s+(.+)$') { $style = 'Heading1'; $content = $matches[1].Trim() }
         elseif ($trimmed -match '^#\s+(.+)$') { $style = 'Title'; $content = $matches[1].Trim() }
-        elseif ($trimmed -match '^[-*]\s+(.+)$') { $style = 'List'; $content = '• ' + $matches[1].Trim() }
-        [void]$paragraphs.Add((ConvertTo-PwxWordParagraphXml -Text $content -Style $style))
+        elseif ($trimmed -match '^[-*]\s+(.+)$') {
+            $style = 'List'
+            $content = $matches[1].Trim()
+            # Entidad XML numérica para evitar que Windows PowerShell 5.1
+            # convierta el glifo de viñeta con una página de códigos ANSI.
+            $prefixXml = '&#x2022; '
+        }
+        [void]$paragraphs.Add((ConvertTo-PwxWordParagraphXml -Text $content -Style $style -PrefixXml $prefixXml))
         $hasMeaningfulText = $true
     }
     if (-not $hasMeaningfulText) {
