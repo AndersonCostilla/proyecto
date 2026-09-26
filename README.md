@@ -29,6 +29,16 @@ El sistema separa responsabilidades:
 
 Para pruebas deterministas no se necesita Ollama.
 
+## Panel web local
+
+Además de la CLI, ya hay un panel para operadores internos. Ejecuta:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File src\bin\web.ps1
+```
+
+Luego abre `http://127.0.0.1:8787` en el mismo computador. Permite crear pedidos, cotizar, analizar requisitos, adjuntar archivos, solicitar pagos y registrar comprobantes. Consulta [docs/WEB_PANEL.md](docs/WEB_PANEL.md) para los límites de seguridad: este panel es local y no debe exponerse a Internet todavía.
+
 ## Uso rápido
 
 ```powershell
@@ -165,6 +175,7 @@ job:new / job:show / job:list / job:requisitos / job:input / job:produce / job:q
 job:deliver / job:approvedeliver / job:state / job:note
 services:list / price:calc / quote:calc
 payment:methods / payment:request / payment:show / payment:proof / payment:approve / payment:reject
+web:start
 lead:new / lead:import / lead:import-socrata / lead:list / lead:dedupe / lead:score / lead:draft / lead:convert
 outbox:new / outbox:show / outbox:list / outbox:approve / outbox:send / outbox:export
 config:show / ollama:check
@@ -184,6 +195,7 @@ config:show / ollama:check
 - [Prospección](docs/PROSPECTING.md)
 - [Reglas de cotización](docs/PRICING.md)
 - [Pagos manuales](docs/PAYMENTS.md)
+- [Panel web local](docs/WEB_PANEL.md)
 - [Formato de entrega](docs/DELIVERY_FORMAT.md)
 - [Pruebas](docs/TESTING.md)
 

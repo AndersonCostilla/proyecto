@@ -52,6 +52,9 @@ OUTBOX:
   outbox:send       -Id <msg-id>
   outbox:export     [-Status DRAFT] [-Path <ruta>]  (exporta borradores DRAFT a workspace/exports; solo lectura, no envia)
 
+PANEL WEB LOCAL:
+  web:start         [-Port 8787]  (solo 127.0.0.1; no exponer a Internet)
+
 SISTEMA:
   config:show
   ollama:check
@@ -421,6 +424,13 @@ switch ($cmd) {
         if (-not $leadId) { throw 'Falta -LeadId' }
         $result = Convert-PwxLeadToClient -LeadId $leadId
         $result | ConvertTo-Json -Depth 5
+        exit 0
+    }
+    'web:start' {
+        $portRaw = Read-PwxFlag -FlagList $rest -Name '-Port'
+        $port = 8787
+        if ($portRaw) { $port = [int]$portRaw }
+        Start-PwxWebServer -Port $port
         exit 0
     }
     'config:show' {

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111827" />
+  <title>PWX · Operaciones</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#top" aria-label="PWX inicio"><span class="brand-icon">P</span><span>PWX<span class="dot">.</span></span></a>
+      <p class="workspace-label">OPERACIONES LOCALES</p>
+      <nav class="nav" aria-label="Navegación">
+        <a href="#dashboard" class="nav-link active"><span>◈</span>Resumen</a>
+        <a href="#requests" class="nav-link"><span>＋</span>Nuevo pedido</a>
+        <a href="#jobs" class="nav-link"><span>▤</span>Trabajos</a>
+        <a href="#pricing" class="nav-link"><span>◉</span>Cotizador</a>
+      </nav>
+      <div class="sidebar-note">
+        <span class="lock">⌾</span>
+        <div><strong>Solo equipo interno</strong><small>Servidor local · 127.0.0.1</small></div>
+      </div>
+    </aside>
+
+    <main id="top" class="main">
+      <header class="topbar">
+        <div><p class="eyebrow">MINDSPRIT / PWX</p><h1>Centro de operaciones</h1></div>
+        <div class="topbar-actions"><span class="status"><i></i> Sistema local</span><button class="ghost" id="refreshBtn" type="button">↻ Actualizar</button></div>
+      </header>
+
+      <section id="dashboard" class="overview" aria-label="Resumen operativo">
+        <article class="metric"><div class="metric-icon violet">◉</div><div><small>Clientes</small><strong id="metricClients">—</strong><span>Registrados</span></div></article>
+        <article class="metric"><div class="metric-icon blue">▤</div><div><small>Trabajos</small><strong id="metricJobs">—</strong><span>En el workspace</span></div></article>
+        <article class="metric"><div class="metric-icon amber">⌁</div><div><small>Por cobrar</small><strong id="metricPayments">—</strong><span>Con comprobante pendiente</span></div></article>
+        <article class="metric"><div class="metric-icon green">✓</div><div><small>Entregados</small><strong id="metricDelivered">—</strong><span>Con entrega aprobada</span></div></article>
+      </section>
+
+      <section id="requests" class="section-grid request-grid">
+        <article class="panel request-panel">
+          <div class="panel-heading"><div><p class="eyebrow">RECEPCIÓN</p><h2>Registrar un pedido</h2><p>Guarda una solicitud y crea su ficha de trabajo.</p></div><span class="step">01</span></div>
+          <form id="requestForm" class="form-grid">
+            <label class="wide"><span>Cliente existente <em>opcional</em></span><select id="requestClient"><option value="">Crear un cliente nuevo</option></select></label>
+            <label><span>Nombre del cliente</span><input id="clientName" type="text" maxlength="120" placeholder="Empresa o persona" /></label>
+            <label><span>Contacto</span><input id="clientContact" type="text" maxlength="160" placeholder="Correo o teléfono" /></label>
+            <label><span>Tipo de servicio</span><select id="requestService" required></select></label>
+            <label><span>Complejidad estimada</span><select id="requestComplexity"><option value="basic">Básica</option><option value="standard" selected>Estándar</option><option value="advanced">Avanzada</option><option value="expert">Experta</option></select></label>
+            <label class="wide"><span>Descripción de la solicitud</span><textarea id="requestDescription" rows="4" maxlength="3000" required placeholder="Qué necesita el cliente, fecha límite, formato de entrega, guía o criterios importantes."></textarea></label>
+            <div class="form-actions wide"><p>Después podrás analizar requisitos, adjuntar archivos y solicitar el pago.</p><button class="primary" type="submit">Crear pedido <span>→</span></button></div>
+          </form>
+        </article>
+
+        <article id="pricing" class="panel quote-panel">
+          <div class="panel-heading"><div><p class="eyebrow">COTIZACIÓN</p><h2>Estimador transparente</h2><p>Calcula antes de emitir una solicitud de pago.</p></div><span class="step">02</span></div>
+          <form id="quoteForm" class="quote-form">
+            <label><span>Servicio</span><select id="quoteService"></select></label>
+            <div class="two-col"><label><span>Unidades</span><input id="quoteUnits" type="number" min="1" value="1" /></label><label><span>Complejidad</span><select id="quoteComplexity"><option value="basic">Básica</option><option value="standard" selected>Estándar</option><option value="advanced">Avanzada</option><option value="expert">Experta</option></select></label></div>
+            <label><span>Extras</span><div id="quoteAddons" class="addons"><small>Selecciona primero un servicio.</small></div></label>
+            <label><span>Descuento autorizado (%)</span><input id="quoteDiscount" type="number" min="0" value="0" /></label>
+            <button class="secondary full" type="submit">Calcular cotización</button>
+          </form>
+          <div id="quoteResult" class="quote-result empty"><span>◎</span><p>El detalle y total aparecerán aquí.</p></div>
+        </article>
+      </section>
+
+      <section id="jobs" class="jobs-section">
+        <div class="section-title"><div><p class="eyebrow">COLA DE TRABAJO</p><h2>Pedidos recientes</h2></div><span id="jobsCount" class="count">0</span></div>
+        <div class="jobs-layout">
+          <article class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Trabajo</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th>Pago</th><th></th></tr></thead><tbody id="jobsTable"><tr><td colspan="6" class="loading">Cargando trabajos…</td></tr></tbody></table></div></article>
+          <aside id="jobDetail" class="panel detail-panel empty-detail"><div class="empty-icon">▤</div><h3>Selecciona un trabajo</h3><p>Desde aquí podrás procesar requisitos, adjuntar archivos y administrar su pago.</p></aside>
+        </div>
+      </section>
+
+      <footer><span>PWX opera de forma local. No expongas este panel a Internet sin autenticación, HTTPS y roles.</span><a href="https://github.com/AndersonCostilla/proyecto" target="_blank" rel="noreferrer">Ver repositorio ↗</a></footer>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

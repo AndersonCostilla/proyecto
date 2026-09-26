@@ -21,3 +21,6 @@ mi-lista.csv
 
 # Configuración privada de cobros
 config/payment-methods.local.json
+
+# Configuración privada del panel local
+config/web.local.json

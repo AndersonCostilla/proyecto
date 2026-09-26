@@ -39,9 +39,13 @@ proyecto/
       simulate.ps1         # motor determinista de prueba (genera resultado.txt)
       excel.ps1 word.ps1 pdf.ps1 data.ps1 construction.ps1   # stubs
     bin/
-      pwx.ps1              # CLI (subcomandos de clientes, trabajos, servicios, outbox)
+      pwx.ps1              # CLI (subcomandos de clientes, trabajos, servicios, pagos y outbox)
+      web.ps1              # inicia el panel local de operador en 127.0.0.1
       demo.ps1             # demo completa del ciclo con Ollama real
       ollama-check.ps1     # diagnostico de Ollama y modelo
+    web/
+      server.ps1           # API local sin dependencias, restringida a loopback
+      public/              # interfaz HTML, CSS y JavaScript del panel
   tests/
     runner.ps1             # harness propio (Assert-*, workspaces aislados)
     run-tests.ps1          # entrada: unit + E2E
