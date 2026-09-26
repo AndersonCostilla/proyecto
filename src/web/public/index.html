@@ -14,6 +14,7 @@
       <p class="workspace-label">OPERACIONES LOCALES</p>
       <nav class="nav" aria-label="Navegación">
         <a href="#dashboard" class="nav-link active"><span>◈</span>Resumen</a>
+        <a href="#word-test" class="nav-link"><span>W</span>Prueba Word</a>
         <a href="#requests" class="nav-link"><span>＋</span>Nuevo pedido</a>
         <a href="#jobs" class="nav-link"><span>▤</span>Trabajos</a>
         <a href="#pricing" class="nav-link"><span>◉</span>Cotizador</a>
@@ -35,6 +36,26 @@
         <article class="metric"><div class="metric-icon blue">▤</div><div><small>Trabajos</small><strong id="metricJobs">—</strong><span>En el workspace</span></div></article>
         <article class="metric"><div class="metric-icon amber">⌁</div><div><small>Por cobrar</small><strong id="metricPayments">—</strong><span>Con comprobante pendiente</span></div></article>
         <article class="metric"><div class="metric-icon green">✓</div><div><small>Entregados</small><strong id="metricDelivered">—</strong><span>Con entrega aprobada</span></div></article>
+      </section>
+
+      <section id="word-test" class="panel word-test-panel" aria-label="Prueba local de documento Word">
+        <div class="word-test-copy">
+          <p class="eyebrow">VALIDACIÓN AISLADA</p>
+          <h2>Generar un Word de prueba</h2>
+          <p>Sube un único archivo Markdown o texto UTF-8. PWX usa Ollama local para validar requisitos, genera el DOCX, ejecuta QA y lo entrega en un workspace temporal.</p>
+          <ul>
+            <li>No crea un pedido comercial.</li>
+            <li>No solicita, registra ni simula pagos.</li>
+            <li>El enlace de descarga está disponible durante 24 horas mientras este panel siga abierto.</li>
+          </ul>
+        </div>
+        <form id="wordTestForm" class="word-test-form">
+          <label><span>Título de la prueba <em>opcional</em></span><input id="wordTestTitle" type="text" maxlength="200" placeholder="Informe técnico de planificación" /></label>
+          <label><span>Contenido fuente (.md o .txt, máximo 1 MB)</span><input id="wordTestFile" type="file" accept=".md,.txt,text/markdown,text/plain" required /></label>
+          <p class="word-test-help">Para esta prueba puedes elegir <code>examples\informe-tecnico-plan-negocio-ejemplo.md</code> desde la carpeta del repositorio.</p>
+          <button id="wordTestSubmit" class="primary" type="submit">Generar Word de prueba <span>→</span></button>
+          <div id="wordTestResult" class="word-test-result" aria-live="polite"></div>
+        </form>
       </section>
 
       <section id="requests" class="section-grid request-grid">

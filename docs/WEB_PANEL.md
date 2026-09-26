@@ -38,10 +38,17 @@ Presiona `Ctrl + C` en PowerShell para detener el servidor.
 - Cola de trabajos con estado y pago asociado.
 - Extracción de requisitos mediante Ollama local.
 - Adjuntar guía, datos o archivos de entrada desde el navegador.
+- Ejecutar una prueba Word aislada desde el navegador: archivo `.md`/`.txt` UTF-8 de máximo 1 MB, requisitos con Ollama local, producción DOCX, QA, entrega temporal y descarga.
 - Solicitar pago manual a través de un método configurado.
 - Subir comprobante y aprobarlo tras revisión humana.
 
 Los archivos de entrada se limitan a 25 MB. Los comprobantes se limitan a 10 MB y aceptan PNG, JPG, JPEG o PDF.
+
+## Prueba Word sin cobro
+
+La sección **Prueba Word** crea un workspace temporal independiente del `store/` normal del panel. No crea pedidos comerciales, no solicita pagos y no representa un pago como aprobado. Requiere que Ollama y el modelo configurado estén disponibles en el computador local.
+
+Selecciona un archivo `.md` o `.txt` UTF-8 de máximo 1 MB, espera el resultado `DELIVERED` con QA `PASS` y descarga el documento. El enlace queda disponible por 24 horas mientras el servidor del panel continúe abierto. El archivo puede contener datos privados, por lo que debe usarse únicamente en el computador local y no se debe exponer este panel a Internet.
 
 ## Seguridad y alcance
 

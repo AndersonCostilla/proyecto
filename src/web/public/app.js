@@ -72,6 +72,31 @@ async function createRequest(event) {
     document.querySelector('#jobs').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) { toast(error.message, true); }
 }
+function setWordTestResult(message, type = '') {
+  const node = $('#wordTestResult');
+  node.className = `word-test-result show ${type}`;
+  node.innerHTML = message;
+}
+async function runWordTest(event) {
+  event.preventDefault();
+  const submit = $('#wordTestSubmit');
+  try {
+    const file = await formFileAsBase64($('#wordTestFile'));
+    if (!file) throw new Error('Selecciona un archivo .md o .txt antes de continuar');
+    submit.disabled = true;
+    setWordTestResult('Procesando con Ollama local, generando el DOCX y ejecutando control de calidad. Puede tardar un momento.', 'pending');
+    const result = await api('/api/word-tests', { method: 'POST', body: JSON.stringify({ ...file, title: $('#wordTestTitle').value.trim() }) });
+    const test = result.test;
+    setWordTestResult(`Prueba completada: estado <strong>${escapeHtml(test.state)}</strong>, QA <strong>${escapeHtml(test.qa)}</strong>. El documento temporal vence el ${escapeHtml(new Date(test.expires_at).toLocaleString('es-CO'))}.<br><a href="${escapeHtml(test.download_url)}">Descargar documento Word (.docx)</a>`, 'success');
+    toast('Documento Word de prueba generado correctamente.');
+    await load();
+  } catch (error) {
+    setWordTestResult(escapeHtml(error.message), 'error');
+    toast(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+}
 function formFileAsBase64(input) {
   const file = input.files?.[0];
   if (!file) return Promise.resolve(null);
@@ -113,6 +138,7 @@ async function approvePayment(jobId) {
 }
 
 $('#refreshBtn').addEventListener('click', load);
+$('#wordTestForm').addEventListener('submit', runWordTest);
 $('#requestForm').addEventListener('submit', createRequest);
 $('#quoteForm').addEventListener('submit', calculateQuote);
 $('#quoteService').addEventListener('change', renderAddons);

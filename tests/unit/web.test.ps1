@@ -21,4 +21,16 @@ Run-PwxTest -Name 'panel web tiene archivos públicos y convierte archivos base6
     Assert-PwxThrows {
         Write-PwxWebTemporaryFile -FileName '..\secreto.txt' -Bytes ([byte[]](1))
     } 'El nombre de archivo no puede hacer traversal'
+
+    $wordPayload = [pscustomobject]@{
+        fileName = 'informe.md'
+        contentBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('# Informe'))
+        title = 'Prueba web'
+    }
+    $wordInput = Get-PwxWebWordTestInput -Payload $wordPayload
+    Assert-PwxEqual 'informe.md' $wordInput.file_name
+    Assert-PwxEqual 'Prueba web' $wordInput.title
+    Assert-PwxThrows {
+        Get-PwxWebWordTestInput -Payload ([pscustomobject]@{ fileName = 'salida.docx'; contentBase64 = $wordPayload.contentBase64 }) | Out-Null
+    } 'La prueba Word solo debe aceptar Markdown o texto'
 }

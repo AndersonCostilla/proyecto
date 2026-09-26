@@ -176,6 +176,136 @@ function Add-PwxWebJobInput {
     }
 }
 
+# Browser-only Word validation is deliberately separate from commercial jobs.
+# It always uses a new temporary workspace and never creates a payment request.
+$script:PwxWebWordTestMaxBytes = 1048576
+$script:PwxWebWordTestRuns = @{}
+
+function Get-PwxWebWordTestInput {
+    param([Parameter(Mandatory)][object]$Payload)
+    $fileName = Get-PwxWebString -Object $Payload -Property 'fileName'
+    $extension = [System.IO.Path]::GetExtension($fileName).ToLowerInvariant()
+    if ($extension -notin @('.md', '.txt')) {
+        throw 'La prueba Word solo acepta un archivo .md o .txt en UTF-8'
+    }
+    Assert-PwxSafeFileName -Name $fileName | Out-Null
+    $bytes = ConvertFrom-PwxWebBase64 -Base64 (Get-PwxWebString -Object $Payload -Property 'contentBase64') -MaxBytes $script:PwxWebWordTestMaxBytes
+    return [pscustomobject]@{
+        file_name = $fileName
+        bytes     = $bytes
+        title     = (Get-PwxWebString -Object $Payload -Property 'title').Trim()
+    }
+}
+
+function Clear-PwxWebExpiredWordTests {
+    $cutoff = (Get-Date).AddHours(-24)
+    foreach ($runId in @($script:PwxWebWordTestRuns.Keys)) {
+        $run = $script:PwxWebWordTestRuns[$runId]
+        if ([datetime]$run.created_at -lt $cutoff) {
+            Remove-Item -LiteralPath $run.root -Recurse -Force -ErrorAction SilentlyContinue
+            $script:PwxWebWordTestRuns.Remove($runId)
+        }
+    }
+}
+
+function Invoke-PwxWebWordTest {
+    param([Parameter(Mandatory)][object]$Payload)
+    Clear-PwxWebExpiredWordTests
+    $wordInput = Get-PwxWebWordTestInput -Payload $Payload
+    $runId = [guid]::NewGuid().ToString('N')
+    $baseTemp = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
+    $runRoot = Join-Path $baseTemp ('pwx-word-web-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $runId.Substring(0, 8))
+    $workspace = Join-Path $runRoot 'workspace'
+    $sourcePath = Join-Path $runRoot $wordInput.file_name
+    $previousWorkspace = $env:PWX_WORKSPACE
+    $previousPaymentPolicy = $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION
+
+    try {
+        New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
+        [System.IO.File]::WriteAllBytes($sourcePath, $wordInput.bytes)
+        # This change is scoped to this request and this temporary workspace only.
+        $env:PWX_WORKSPACE = $workspace
+        $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION = 'false'
+
+        $ollama = Get-PwxOllamaStatus
+        $model = (Get-PwxConfig).Model
+        $modelState = Test-PwxModelAvailable -Model $model
+        if ($ollama.status -ne 'OK' -or $modelState -ne 'OK') {
+            throw "Ollama/modelo no disponible. Ollama=$($ollama.status), Modelo=$modelState"
+        }
+
+        $client = New-PwxClient -Name 'Validacion Word Web' -Contact 'validacion-web@pwx.test'
+        $title = if ($wordInput.title) { $wordInput.title.Substring(0, [Math]::Min(200, $wordInput.title.Length)) } else { 'Documento Word de validacion web' }
+        $job = New-PwxJob -ClientId $client.id -Service 'word-service' -Description $title
+        Add-PwxJobInputFile -JobId $job.id -SourcePath $sourcePath -TargetName $wordInput.file_name | Out-Null
+
+        $requirementsRequest = @"
+Selecciona obligatoriamente word-service.
+Esto es una validacion tecnica local y aislada de un documento profesional Word.
+Usa $($wordInput.file_name) como contenido de entrada.
+La entrega requerida es un archivo DOCX profesional.
+Conserva titulos, subtitulos, listas y parrafos.
+El documento debe ser valido y no estar vacio.
+"@
+        $requirements = Invoke-PwxRequirementsAgent -JobId $job.id -Request $requirementsRequest
+        if (-not $requirements.ok) { throw "Requisitos fallaron: $($requirements.code) $($requirements.error)" }
+        if ($requirements.spec.service -ne 'word-service') {
+            throw "El modelo selecciono '$($requirements.spec.service)', se esperaba word-service"
+        }
+
+        $production = Invoke-PwxProductionAgent -JobId $job.id
+        if (-not $production.ok) { throw "Produccion fallo: $($production.error) $($production.detail)" }
+        $delivery = New-PwxDelivery -JobId $job.id
+        Approve-PwxDelivery -JobId $job.id -By 'web-word-test' | Out-Null
+        $found = Find-PwxJob -JobId $job.id
+        $outputPath = Join-Path $found.JobDir 'delivery\documento-profesional.docx'
+        if (-not (Test-Path -LiteralPath $outputPath)) { throw 'No se encontro el documento Word de prueba' }
+
+        $script:PwxWebWordTestRuns[$runId] = [pscustomobject]@{
+            root       = $runRoot
+            output_path = $outputPath
+            created_at = Get-Date
+        }
+        return [ordered]@{
+            run_id       = $runId
+            state        = (Get-PwxJob -JobId $job.id).state
+            qa           = $production.qa.verdict
+            file_count   = $delivery.file_count
+            download_url = "/api/word-tests/$runId/download"
+            expires_at   = (Get-Date).AddHours(24).ToString('o')
+        }
+    }
+    catch {
+        Remove-Item -LiteralPath $runRoot -Recurse -Force -ErrorAction SilentlyContinue
+        throw
+    }
+    finally {
+        $env:PWX_WORKSPACE = $previousWorkspace
+        $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION = $previousPaymentPolicy
+    }
+}
+
+function Send-PwxWebWordTestDownload {
+    param([Parameter(Mandatory)][System.Net.HttpListenerContext]$Context, [Parameter(Mandatory)][string]$RunId)
+    Clear-PwxWebExpiredWordTests
+    if (-not $script:PwxWebWordTestRuns.ContainsKey($RunId)) {
+        Send-PwxWebError -Context $Context -Code 'NOT_FOUND' -Message 'La prueba no existe o ya vencio' -StatusCode 404
+        return
+    }
+    $run = $script:PwxWebWordTestRuns[$RunId]
+    if (-not (Test-Path -LiteralPath $run.output_path)) {
+        Send-PwxWebError -Context $Context -Code 'NOT_FOUND' -Message 'El documento temporal ya no esta disponible' -StatusCode 404
+        return
+    }
+    $bytes = [System.IO.File]::ReadAllBytes($run.output_path)
+    $Context.Response.StatusCode = 200
+    $Context.Response.ContentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    $Context.Response.AddHeader('Content-Disposition', 'attachment; filename="documento-profesional.docx"')
+    $Context.Response.ContentLength64 = $bytes.Length
+    $Context.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+    $Context.Response.Close()
+}
+
 function Add-PwxWebPaymentProof {
     param([Parameter(Mandatory)][string]$JobId, [Parameter(Mandatory)][object]$Payload)
     $fileName = Get-PwxWebString -Object $Payload -Property 'fileName'
@@ -237,6 +367,16 @@ function Invoke-PwxWebApi {
     $request = $Context.Request
     $method = $request.HttpMethod.ToUpperInvariant()
     try {
+        if ($method -eq 'GET' -and $Path -match '^/api/word-tests/([A-Za-z0-9]+)/download$') {
+            Send-PwxWebWordTestDownload -Context $Context -RunId $matches[1]
+            return
+        }
+        if ($method -eq 'POST' -and $Path -eq '/api/word-tests') {
+            $body = Get-PwxWebRequestJson -Request $request
+            $test = Invoke-PwxWebWordTest -Payload $body
+            Send-PwxWebJson -Context $Context -Object ([ordered]@{ ok = $true; test = $test }) -StatusCode 201
+            return
+        }
         if ($method -eq 'GET' -and $Path -eq '/api/dashboard') {
             Send-PwxWebJson -Context $Context -Object ([ordered]@{ ok = $true; dashboard = Get-PwxWebDashboard })
             return
