@@ -104,7 +104,7 @@ Run-PwxTest -Name 'T9: precio persistido al crear el trabajo' -File 'unit' -Body
     $job = New-PwxJob -ClientId $client.id -Service 'excel-service'
     Assert-PwxNotNull $job.price 'El precio no debe ser null para servicio conocido'
     Assert-PwxEqual 'excel-service' $job.price.service_id
-    Assert-PwxEqual 80000.0 ([double]$job.price.base_price)
+    Assert-PwxEqual 64000.0 ([double]$job.price.base_price)
     Assert-PwxEqual 'COP' $job.price.currency
     $calc = Get-PwxPrice -ServiceId 'excel-service'
     Assert-PwxEqual $calc.subtotal ([double]$job.price.subtotal)

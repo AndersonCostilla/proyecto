@@ -13,7 +13,7 @@
           "Test-PwxExcelOutput"
         ]
       },
-      "basePrice": 80000,
+      "basePrice": 64000.0,
       "estimatedHours": 2,
       "minMarginPct": 30,
       "rules": {
@@ -22,17 +22,17 @@
       "addons": {
         "rush": {
           "name": "Entrega urgente",
-          "price": 25000
+          "price": 20000.0
         },
         "extra-sheet": {
           "name": "Hoja adicional",
-          "price": 10000
+          "price": 8000.0
         }
       },
       "requiresPayment": true,
       "pricing": {
         "includedUnits": 1,
-        "extraUnitPrice": 15000,
+        "extraUnitPrice": 12000.0,
         "unitLabel": "hoja",
         "complexity": {
           "basic": 0.85,
@@ -46,7 +46,7 @@
       "name": "Documentos Word",
       "description": "Redaccion y formateo de documentos de texto",
       "implemented": false,
-      "basePrice": 60000,
+      "basePrice": 48000.0,
       "estimatedHours": 1.5,
       "minMarginPct": 30,
       "rules": {
@@ -55,13 +55,13 @@
       "addons": {
         "rush": {
           "name": "Entrega urgente",
-          "price": 20000
+          "price": 16000.0
         }
       },
       "requiresPayment": true,
       "pricing": {
         "includedUnits": 5,
-        "extraUnitPrice": 5000,
+        "extraUnitPrice": 4000.0,
         "unitLabel": "página",
         "complexity": {
           "basic": 0.85,
@@ -75,7 +75,7 @@
       "name": "PDF",
       "description": "Conversion y ensamblado de PDF",
       "implemented": false,
-      "basePrice": 50000,
+      "basePrice": 40000.0,
       "estimatedHours": 1,
       "minMarginPct": 30,
       "rules": {
@@ -85,7 +85,7 @@
       "requiresPayment": true,
       "pricing": {
         "includedUnits": 10,
-        "extraUnitPrice": 2500,
+        "extraUnitPrice": 2000.0,
         "unitLabel": "página",
         "complexity": {
           "basic": 0.9,
@@ -99,7 +99,7 @@
       "name": "Limpieza de datos",
       "description": "Normalizacion, deduplicacion y transformacion de datos",
       "implemented": false,
-      "basePrice": 120000,
+      "basePrice": 96000.0,
       "estimatedHours": 3,
       "minMarginPct": 30,
       "rules": {
@@ -108,13 +108,13 @@
       "addons": {
         "rush": {
           "name": "Entrega urgente",
-          "price": 30000
+          "price": 24000.0
         }
       },
       "requiresPayment": true,
       "pricing": {
         "includedUnits": 5,
-        "extraUnitPrice": 15000,
+        "extraUnitPrice": 12000.0,
         "unitLabel": "mil registros",
         "complexity": {
           "basic": 0.85,
@@ -128,7 +128,7 @@
       "name": "Cómputos y presupuestos de obra",
       "description": "Cuantificacion y presupuestacion de partidas de construccion",
       "implemented": false,
-      "basePrice": 200000,
+      "basePrice": 160000.0,
       "estimatedHours": 4,
       "minMarginPct": 40,
       "rules": {
@@ -137,17 +137,17 @@
       "addons": {
         "rush": {
           "name": "Entrega urgente",
-          "price": 40000
+          "price": 32000.0
         },
         "apv": {
           "name": "Analisis de precios unitarios",
-          "price": 50000
+          "price": 40000.0
         }
       },
       "requiresPayment": true,
       "pricing": {
         "includedUnits": 20,
-        "extraUnitPrice": 5000,
+        "extraUnitPrice": 4000.0,
         "unitLabel": "ítem de obra",
         "complexity": {
           "basic": 0.9,
@@ -167,7 +167,7 @@
         ],
         "validators": []
       },
-      "basePrice": 10000,
+      "basePrice": 8000.0,
       "estimatedHours": 0.1,
       "minMarginPct": 0,
       "rules": {
@@ -177,7 +177,7 @@
       "requiresPayment": false,
       "pricing": {
         "includedUnits": 1,
-        "extraUnitPrice": 0,
+        "extraUnitPrice": 0.0,
         "unitLabel": "simulación",
         "complexity": {
           "basic": 1.0,

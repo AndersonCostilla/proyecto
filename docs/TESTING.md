@@ -40,6 +40,23 @@ powershell -ExecutionPolicy Bypass -File tests\run-tests.ps1 -OnlyUnit
 powershell -ExecutionPolicy Bypass -File tests\run-tests.ps1 -OnlyE2E
 ```
 
+### Prueba real de agentes con Ollama
+
+Cuando Ollama y el modelo configurado estén activos, ejecuta esta prueba explícita:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File src\\bin\\real-agent-check.ps1
+```
+
+La prueba usa un workspace temporal aislado y verifica con el modelo local real:
+
+- El agente de requisitos y su JSON estructurado.
+- El flujo de producción y QA con `simulate-service`.
+- El agente de prospección, sin enviar mensajes externos.
+- La cotización determinista con los precios vigentes.
+
+Al final deja un reporte JSON en `%TEMP%\\pwx-real-agent-...\\real-agent-report.json`. Si falla, el script termina con código `1` y reporta el componente que necesita revisión. Esta prueba no usa clientes ni pagos reales.
+
 ### Soak (estrés)
 
 ```powershell

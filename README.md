@@ -156,6 +156,14 @@ powershell -ExecutionPolicy Bypass -File tests\run-tests.ps1 -OnlyE2E
 
 El harness propio no usa Pester. Las pruebas ejecutan workspaces temporales aislados en `%TEMP%\pwx-tests`, no alteran `store/` y no requieren Ollama gracias a respuestas LLM inyectadas.
 
+Con Ollama y `qwen3:8b` activos, puedes ejecutar la verificación real de agentes:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File src\bin\real-agent-check.ps1
+```
+
+Genera un reporte JSON temporal y valida requisitos LLM, prospección LLM, producción, QA y cotización sin contactar personas ni usar pagos reales.
+
 ## Servicios
 
 | Servicio | Estado |
