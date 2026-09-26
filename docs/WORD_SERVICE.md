@@ -54,6 +54,17 @@ El QA verifica que el archivo:
 - Incluya texto real en `word/document.xml`.
 - No esté vacío.
 
+## Prueba técnica completa sin cobro
+
+Para validar el servicio Word con un archivo real sin crear un pedido comercial ni simular pagos, usa un workspace temporal aislado:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File src\bin\run-word-local.ps1 `
+  -InputPath "$HOME\Documents\propuesta.md"
+```
+
+El script usa Ollama real, genera el DOCX, ejecuta QA, empaqueta la entrega y muestra la ruta del archivo resultante. No toca `store/`, no contacta personas y no usa un método de pago.
+
 ## Flujo desde el panel web
 
 1. Inicia el panel local con `src\bin\web.ps1`.
