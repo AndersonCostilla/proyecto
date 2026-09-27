@@ -1,5 +1,7 @@
 # PWX — Motor operativo comercial local
 
+[![CI](https://github.com/AndersonCostilla/proyecto/actions/workflows/ci.yml/badge.svg)](https://github.com/AndersonCostilla/proyecto/actions/workflows/ci.yml)
+
 Sistema multiagente local para gestionar servicios digitales profesionales: planillas Excel, documentos, PDF, datos y presupuestos de obra. Corre 100% en PowerShell con modelos LLM locales vía Ollama, sin APIs de IA pagas ni base de datos externa.
 
 El sistema separa responsabilidades:

@@ -23,6 +23,9 @@ if (-not (Test-Path -LiteralPath $InputPath)) {
 $ws = Join-Path ([System.IO.Path]::GetTempPath()) ("pwx-soak-" + (Get-Date -Format "yyyyMMdd-HHmmss"))
 $env:PWX_WORKSPACE = $ws
 $env:PWX_ROOT = $script:SoakRoot
+# El soak valida el flujo completo extremo a extremo; la política de pago se cubre
+# con tests dedicados, igual que hace tests/runner.ps1 con todos los tests.
+$env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION = 'false'
 . (Join-Path $script:SoakRoot 'src\bootstrap.ps1')
 New-PwxDirectory -Path $ws | Out-Null
 

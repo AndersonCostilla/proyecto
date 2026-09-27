@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-pwsh
+            os: ubuntu-latest
+            shell: pwsh
+            exe: pwsh
+          - label: windows-pwsh
+            os: windows-latest
+            shell: pwsh
+            exe: pwsh
+          - label: windows-ps51
+            os: windows-latest
+            shell: powershell
+            exe: powershell
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Version de PowerShell
+        shell: ${{ matrix.shell }}
+        run: |
+          if ($PSVersionTable.PSEdition -eq 'Core') {
+            Write-Host ("pwsh {0} ({1})" -f $PSVersionTable.PSVersion, $PSVersionTable.OS)
+          } else {
+            Write-Host ("Windows PowerShell {0} ({1})" -f $PSVersionTable.PSVersion, $PSVersionTable.OS)
+          }
+          Write-Host ("Ejecutable hijo: {0}" -f '${{ matrix.exe }}')
+
+      # La suite se lanza como proceso hijo con -File: GitHub Actions ejecuta los
+      # bloques con `-command ". script"`, y en ese modo los overrides $global: de
+      # los tests (limites de Excel, mocks de Ollama) pierden contra las copias del
+      # scope script y aparecen falsos fallos. -File es la entrada canonica (igual
+      # que en local). Tee-Object captura la salida completa en tests/_last-run.log
+      # (gitignored) sin modificar el runner.
+      - name: Suite completa (109 tests)
+        shell: ${{ matrix.shell }}
+        run: |
+          $exe = '${{ matrix.exe }}'
+          & $exe -NoProfile -ExecutionPolicy Bypass -File ./tests/run-tests.ps1 2>&1 3>&1 4>&1 6>&1 | Tee-Object -FilePath tests/_last-run.log
+          if ((Test-Path -LiteralPath variable:\LASTEXITCODE) -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # Soak corto de estabilidad (5 iteraciones del pipeline completo).
+      # Solo en la pierna linux/pwsh para mantener el CI rapido y gratis.
+      - name: Soak (5 iteraciones)
+        if: matrix.label == 'linux-pwsh'
+        shell: pwsh
+        run: |
+          & pwsh -NoProfile -ExecutionPolicy Bypass -File ./tests/soak/run-soak.ps1 -Iterations 5 2>&1 3>&1 4>&1 6>&1 | Tee-Object -FilePath tests/_soak-run.log
+          if ((Test-Path -LiteralPath variable:\LASTEXITCODE) -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Subir logs (solo si fallo)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.label }}
+          path: |
+            tests/_last-run.log
+            tests/_soak-run.log
+          if-no-files-found: ignore
+          retention-days: 7

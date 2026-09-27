@@ -85,6 +85,54 @@ Parámetros:
 
 El workspace temporal se deja intacto por defecto para auditoría, y la ruta se imprime al final.
 
+## CI (GitHub Actions)
+
+El workflow [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) corre en
+cada `push` y `pull_request` hacia `main`.
+Es 100% gratuita: sin secretos, sin servicios externos y sin dependencias nuevas.
+
+**Qué corre en CI (3 piernas matriz):**
+
+| Pierna | Runner | Shell | Qué ejecuta |
+| --- | --- | --- | --- |
+| `linux-pwsh` | `ubuntu-latest` | `pwsh` (PS 7) | suite completa + soak corto (`-Iterations 5`) |
+| `windows-pwsh` | `windows-latest` | `pwsh` (PS 7) | suite completa |
+| `windows-ps51` | `windows-latest` | `powershell` (Windows PowerShell **5.1 real**) | suite completa |
+
+- **Suite completa** = `./tests/run-tests.ps1` (unit + E2E, exactamente el mismo
+  comando que en local).
+- La salida se guarda con `Tee-Object` en `tests/_last-run.log` (y
+  `tests/_soak-run.log` en la pierna de soak) **sin modificar el runner**; ambos
+  archivos están cubiertos por el `.gitignore` (`*.log`).
+- Los logs solo se suben como *artifact* (`test-logs-<pierna>`, retención 7 días)
+  **cuando la pierna falla**.
+
+**Qué NO corre por defecto:**
+
+- Los tests *live* con Ollama (`tests/e2e/ollama-live.test.ps1`): la suite los
+  detecta y muestra `SKIP` cuando no hay modelo disponible. En CI no se instala
+  ni configura Ollama a propósito — por eso son opt-in y no bloquean el merge.
+- No se usa ningún secreto de GitHub ni red especial: nada de SMTP real,
+  APIs de pago ni servicios de terceros.
+
+**Cómo reproducir localmente (idéntico a CI):**
+
+```powershell
+# Suite completa — misma entrada canónica que en CI (PowerShell 7; en 5.1 usa powershell)
+pwsh -File ./tests/run-tests.ps1
+
+# Con log espejo del de CI (proceso hijo + Tee, igual que el workflow)
+pwsh -File ./tests/run-tests.ps1 2>&1 3>&1 4>&1 6>&1 | Tee-Object -FilePath tests/_last-run.log
+
+# Soak corto (solo linux+pwsh en CI)
+pwsh -File ./tests/soak/run-soak.ps1 -Iterations 5
+```
+
+> Nota: la suite debe lanzarse como script de entrada (`-File` o dot-source).
+> Invocarla con `& ./tests/run-tests.ps1` desde una sesión en cambio de scope
+> produce falsos fallos (T-E9 y prospección) por cómo resuelven los `$global:`
+> de los tests — por eso el workflow la lanza como proceso hijo con `-File`.
+
 ## Buenas prácticas
 
 - **Nunca** correr tests o soak contra el workspace del repositorio: usar siempre
