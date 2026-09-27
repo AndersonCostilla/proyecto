@@ -85,3 +85,22 @@ jobs:
             tests/_soak-run.log
           if-no-files-found: ignore
           retention-days: 7
+
+      # El resumen queda en la pagina del check (visible via API publica de
+      # check-runs), sin necesidad de autenticacion para leer los logs.
+      - name: Resumen del fallo (check publico)
+        if: failure()
+        shell: pwsh
+        run: |
+          $fence = '```'
+          $body = ''
+          if (Test-Path -LiteralPath 'tests/_last-run.log') {
+            $lines = @(Get-Content -LiteralPath 'tests/_last-run.log')
+            $tail = if ($lines.Count -gt 60) { $lines[($lines.Count - 60)..($lines.Count - 1)] } else { $lines }
+            $body = ($tail -join "`n")
+          }
+          else {
+            $body = '(sin tests/_last-run.log)'
+          }
+          $md = '### Suite fallida (' + '${{ matrix.label }}' + ')' + "`n" + $fence + "`n" + $body + "`n" + $fence + "`n"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $md

@@ -18,7 +18,12 @@ function Start-PwxWebTestServer {
         [Parameter(Mandatory)][string]$Tag,
         [switch]$DevMode
     )
-    $hostExe = (Get-Process -Id $PID).Path
+    # Ejecutable del host actual: $PSHOME es mas robusto que Get-Process.Path
+    # en Windows (y funciona igual en pwsh y Windows PowerShell 5.1).
+    $exeName = 'pwsh'
+    if ($PSVersionTable.PSEdition -ne 'Core') { $exeName = 'powershell' }
+    if ($env:OS -eq 'Windows_NT') { $exeName = $exeName + '.exe' }
+    $hostExe = Join-Path $PSHOME $exeName
     $fixture = Join-Path (Join-Path $global:PwxRoot 'tests') (Join-Path 'fixtures' 'start-web-server.ps1')
     $out = Join-Path $Workspace ('web-{0}.out.log' -f $Tag)
     $err = Join-Path $Workspace ('web-{0}.err.log' -f $Tag)
@@ -92,10 +97,20 @@ function Invoke-PwxWebTestHttp {
     $req.Method = $Method
     $req.Timeout = 20000
     $req.ReadWriteTimeout = 20000
+    # Sin proxy: las pruebas van directo a loopback (en Windows el proxy del
+    # sistema podria interferir con 127.0.0.1).
+    $req.Proxy = $null
     if (-not [string]::IsNullOrEmpty($Cookie)) {
-        $cc = New-Object System.Net.CookieContainer
-        $cc.SetCookies([System.Uri]$Uri, $Cookie)
-        $req.CookieContainer = $cc
+        # CookieContainer es la via documentada; si un runtime la rechaza
+        # (cookies sobre IP), se cae a la cabecera cruda.
+        try {
+            $cc = New-Object System.Net.CookieContainer
+            $cc.SetCookies([System.Uri]$Uri, $Cookie)
+            $req.CookieContainer = $cc
+        }
+        catch {
+            $req.Headers['Cookie'] = $Cookie
+        }
     }
     if ($null -ne $Headers) {
         foreach ($key in $Headers.Keys) {
