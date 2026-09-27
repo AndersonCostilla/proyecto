@@ -55,6 +55,11 @@ OUTBOX:
 PANEL WEB LOCAL:
   web:start         [-Port 8787]  (solo 127.0.0.1; no exponer a Internet)
 
+BACKUP DEL STORE:
+  backup:create     [-Label <etiqueta>]  (copia store/ a backups/<UTCSTAMP>[-label]/ con manifest + checksums)
+  backup:list
+  backup:verify     -Path <bundleDir>    (verifica integridad; exit 1 si falla. sin restore en PR-2)
+
 SISTEMA:
   config:show
   ollama:check
@@ -444,6 +449,35 @@ switch ($cmd) {
         $model = (Get-PwxConfig).Model
         "modelo config: $model  ->  $((Test-PwxModelAvailable -Model $model))"
         exit 0
+    }
+    'backup:create' {
+        $label = Read-PwxFlag -FlagList $rest -Name '-Label'
+        $result = New-PwxBackup -Label $label
+        $result | ConvertTo-Json -Depth 4
+        exit 0
+    }
+    'backup:list' {
+        $items = Get-PwxBackupList
+        Write-Host ("Raiz de backups: {0}" -f (Get-PwxBackupRootDir))
+        if ($items.Count -eq 0) { Write-Host '(sin backups)' }
+        else {
+            $items | ForEach-Object {
+                "{0}  {1}  archivos={2}  bytes={3}  {4}" -f $_.created_utc, $_.name, $_.file_count, $_.total_bytes, $_.content_hash
+            }
+        }
+        exit 0
+    }
+    'backup:verify' {
+        $path = Read-PwxFlag -FlagList $rest -Name '-Path'
+        if (-not $path) { throw 'Falta -Path' }
+        $result = Test-PwxBackupBundle -Path $path
+        if ($result.ok) {
+            Write-Host ("VERIFY OK  {0}  archivos={1}  bytes={2}  {3}" -f $path, $result.manifest.file_count, $result.manifest.total_bytes, $result.manifest.content_hash)
+            exit 0
+        }
+        Write-Host ("VERIFY FALLA  {0}" -f $path)
+        foreach ($p in $result.problems) { Write-Host ("  - {0}" -f $p) }
+        exit 1
     }
     default {
         Show-PwxHelp

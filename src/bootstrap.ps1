@@ -22,6 +22,7 @@ $moduleFiles = @(
     'core\leads.ps1',
     'core\qa.ps1',
     'core\delivery.ps1',
+    'core\backup.ps1',
     'agents\ollama.ps1',
     'agents\requirements.ps1',
     'agents\production.ps1',

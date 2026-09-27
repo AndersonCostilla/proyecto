@@ -2,6 +2,9 @@
 store/
 logs/
 
+# Backups del store (bundles locales; nunca se commitean)
+backups/
+
 # Secretos y configuracion local
 .env
 *.env
