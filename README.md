@@ -148,6 +148,24 @@ powershell -ExecutionPolicy Bypass -File src\bin\pwx.ps1 job:produce -JobId J-00
 
 Consulta [docs/PAYMENTS.md](docs/PAYMENTS.md) y [docs/PRICING.md](docs/PRICING.md) para el flujo, límites y políticas.
 
+## Backups del store
+
+PWX soporta backups verificables (100% locales y gratuitos): create/list/verify.
+
+- Guía: [`docs/BACKUP.md`](docs/BACKUP.md)
+
+Ejemplos:
+
+```powershell
+pwsh -File src/bin/pwx.ps1 backup:create -Label diario
+pwsh -File src/bin/pwx.ps1 backup:list
+pwsh -File src/bin/pwx.ps1 backup:verify -Path backups/<bundle>/
+```
+
+Config:
+
+- `PWX_BACKUP_DIR` (opcional): raíz donde se guardan los bundles.
+
 ## Pruebas automatizadas
 
 ```powershell

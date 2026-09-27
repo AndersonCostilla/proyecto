@@ -30,6 +30,7 @@ proyecto/
       outbox.ps1           # cola de mensajes salientes (DRAFT->APPROVED->SENT)
       qa.ps1               # validacion determinista de salida (PASS/FAIL)
       delivery.ps1         # empaquetado + manifest.json + checksums.sha256
+      backup.ps1           # backups verificables del store (create/list/verify; restore en PR-3)
     agents/                # usa LLM local (Ollama)
       ollama.ps1           # invoca /api/tags y /api/chat, categoriza errores
       requirements.ps1     # extrae especificacion JSON, la valida y conforma
