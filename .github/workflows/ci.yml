@@ -41,11 +41,15 @@ jobs:
       # suite necesita la entrada canonica -File para que los overrides $global:
       # de los tests (limites de Excel, mocks de Ollama) resuelvan igual que en
       # local. Tee-Object guarda la salida en tests/_last-run.log (gitignored)
-      # sin modificar el runner.
+      # sin modificar el runner. El primer reinicio de $ErrorActionPreference
+      # deshace el 'stop' que GitHub prepende: en Windows PowerShell 5.1 el
+      # stderr nativo del hijo elevaria ErrorRecords terminantes y abortaria el
+      # paso a mitad de suite; el exit real lo gobierna $LASTEXITCODE.
       - name: Suite completa (109 tests, pwsh)
         if: matrix.shell == 'pwsh'
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           Write-Host ("pwsh {0} ({1})" -f $PSVersionTable.PSVersion, $PSVersionTable.OS)
           $exe = 'pwsh'
           & $exe -NoProfile -ExecutionPolicy Bypass -File ./tests/run-tests.ps1 2>&1 3>&1 4>&1 6>&1 | Tee-Object -FilePath tests/_last-run.log
@@ -55,10 +59,17 @@ jobs:
         if: matrix.shell == 'powershell'
         shell: powershell
         run: |
+          $ErrorActionPreference = 'Continue'
           Write-Host ("Windows PowerShell {0} ({1})" -f $PSVersionTable.PSVersion, $PSVersionTable.OS)
           $exe = 'powershell'
-          & $exe -NoProfile -ExecutionPolicy Bypass -File ./tests/run-tests.ps1 2>&1 3>&1 4>&1 6>&1 | Tee-Object -FilePath tests/_last-run.log
           $code = 0
+          try {
+            & $exe -NoProfile -ExecutionPolicy Bypass -File ./tests/run-tests.ps1 2>&1 3>&1 4>&1 6>&1 | Tee-Object -FilePath tests/_last-run.log
+          } catch {
+            $msg = ($_.Exception.Message -replace '[^\x20-\x7E]', '?')
+            Write-Host ("::error title=ps51-excepcion::{0}" -f $msg)
+            $code = 1
+          }
           if ((Test-Path -LiteralPath variable:\LASTEXITCODE) -and $LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
           if ($code -ne 0) {
             $lines = @(Get-Content -LiteralPath tests/_last-run.log -ErrorAction SilentlyContinue)
@@ -79,6 +90,7 @@ jobs:
         if: matrix.label == 'linux-pwsh'
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Continue'
           & pwsh -NoProfile -ExecutionPolicy Bypass -File ./tests/soak/run-soak.ps1 -Iterations 5 2>&1 3>&1 4>&1 6>&1 | Tee-Object -FilePath tests/_soak-run.log
           if ((Test-Path -LiteralPath variable:\LASTEXITCODE) -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
