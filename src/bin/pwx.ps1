@@ -54,6 +54,7 @@ OUTBOX:
 
 PANEL WEB LOCAL:
   web:start         [-Port 8787]  (solo 127.0.0.1; no exponer a Internet)
+  web:hash          [-Password <pw>]  (genera hash PBKDF2 para config/web.local.json; sin -Password lo pide interactivo)
 
 BACKUP DEL STORE:
   backup:create     [-Label <etiqueta>]  (copia store/ a backups/<UTCSTAMP>[-label]/ con manifest + checksums)
@@ -437,6 +438,19 @@ switch ($cmd) {
         $port = 8787
         if ($portRaw) { $port = [int]$portRaw }
         Start-PwxWebServer -Port $port
+        exit 0
+    }
+    'web:hash' {
+        $pw = Read-PwxFlag -FlagList $rest -Name '-Password'
+        if ($null -eq $pw) {
+            $pw = Read-Host 'Password'
+        }
+        if ([string]::IsNullOrEmpty($pw)) {
+            Write-Host 'Password vacio.'
+            exit 1
+        }
+        $hash = ConvertTo-PwxPasswordHash -Password $pw
+        Write-Output $hash
         exit 0
     }
     'config:show' {

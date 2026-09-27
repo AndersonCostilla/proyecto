@@ -71,6 +71,75 @@ No lo expongas a Internet ni lo publiques mediante port forwarding. Para convert
 - Almacenamiento multiusuario y copias de seguridad.
 - Revisión de seguridad antes del despliegue.
 
+## Autenticación del panel (núcleo PR‑4)
+
+El núcleo de autenticación ya existe en el código (`src/core/auth.ps1`): hashing de contraseñas con PBKDF2, validación de configuración, sesiones en memoria y la función de decisión que el middleware consumirá. **La integración real al panel (endpoint de login, cookies de sesión y control de roles por ruta) llega en PR‑5**; mientras tanto, abrir el panel no cambia en nada y esta sección solo describe cómo preparar la configuración.
+
+### Archivo `config/web.local.json`
+
+Copia el ejemplo (sin secretos) y edítalo localmente:
+
+```powershell
+Copy-Item config\web.example.json config\web.local.json
+```
+
+El archivo está ignorado por Git. Su schema v1 es:
+
+```json
+{
+  "schema_version": "1",
+  "auth": {
+    "enabled": false,
+    "users": [
+      { "id": "admin",   "role": "admin",    "passwordHash": "REEMPLAZAR" },
+      { "id": "operador", "role": "operator", "passwordHash": "REEMPLAZAR" }
+    ]
+  }
+}
+```
+
+Reglas que valida el núcleo (`Test-PwxWebAuthConfigValid`, sin lanzar excepciones):
+
+- `schema_version` debe ser exactamente `"1"` (texto).
+- `auth.enabled` debe ser booleano.
+- Con `enabled: true`: `users` no puede estar vacío; cada usuario necesita `id` no vacío y único, `role` igual a `operator` o `admin`, y `passwordHash` con formato `pbkdf2-sha256$<iters>$<salt>$<hash>` (o `pbkdf2-sha1$...` como compatibilidad en runtimes sin SHA256).
+- Con `enabled: false` solo se exigen `schema_version` y `enabled` (el panel queda abierto, sin login).
+
+Si el archivo no existe, `Get-PwxWebAuthConfig` devuelve `$null`. La ruta puede sobrescribirse con la variable de entorno `PWX_WEB_CONFIG_FILE` (útil para pruebas).
+
+### Generar hashes: `web:hash`
+
+```powershell
+pwsh -File src/bin/pwx.ps1 web:hash -Password "mi-password"
+```
+
+Imprime **una sola línea** con el hash, lista para pegar en `passwordHash` de `config/web.local.json`. Sin `-Password` el comando pide la contraseña de forma interactiva con `Read-Host`:
+
+```powershell
+pwsh -File src/bin/pwx.ps1 web:hash
+```
+
+Precauciones:
+
+- Pasar `-Password` en la línea de comandos deja la contraseña en el **historial del shell** y en la lista de procesos del sistema; para uso diario prefiere el modo interactivo.
+- El hash no se puede revertir (PBKDF2 con 120000 iteraciones, salt aleatorio de 16 bytes), pero no sustituye un archivo local protegido: `config/web.local.json` es privado como `payment-methods.local.json`.
+
+### Qué decidirá el middleware (contrato PR‑5)
+
+`Get-PwxWebAuthDecision -Path -Method -Headers -Config -DevMode` responde `{ allowed, code, userId, role, reason }` con estas reglas:
+
+| Situación | allowed | code | reason |
+|---|---|---|---|
+| Rutas públicas: `GET /`, `GET /app.js`, `GET /styles.css`, `POST /api/login` | sí | 200 | `PUBLIC` |
+| Cualquier otra sin cookie `pwx_session` válida | no | 401 | `AUTH_REQUIRED` |
+| Mutación (`POST`/`PUT`/`PATCH`/`DELETE`) sin header `X-Pwx-Panel: 1` | no | 403 | `CSRF_HEADER_MISSING` |
+| `/api/admin/*` con rol `operator` | no | 403 | `FORBIDDEN_ROLE` |
+| Con sesión válida (y header CSRF si es mutación) | sí | 200 | `SESSION_OK` |
+| `auth.enabled: false` en la config | sí | 200 | `AUTH_DISABLED` |
+| Ejecución con `-DevMode` | sí | 200 | `DEV_MODE` |
+
+Las sesiones viven solo en memoria: se crean con `New-PwxWebSession` (TTL en minutos), se limpian con `Invoke-PwxWebSessionSweep` y desaparecen al reiniciar el servidor. Ninguna ruta del panel usa todavía esta decisión; eso se conecta en PR‑5 (deny-start sin config, `-Dev`, `/api/login`, cookies y roles).
+
 ## Configuración de pagos
 
 Antes de emitir pagos por Nequi o transferencia, crea el archivo privado:

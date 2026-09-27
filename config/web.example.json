@@ -1,0 +1,19 @@
+{
+  "schema_version": "1",
+  "note": "Copia este archivo a config/web.local.json (gitignored), genera cada passwordHash con: pwx web:hash -Password <pw>  (o sin -Password para modo interactivo y asi no dejar el password en el historial del shell) y reemplaza REEMPLAZAR antes de poner auth.enabled en true.",
+  "auth": {
+    "enabled": false,
+    "users": [
+      {
+        "id": "admin",
+        "role": "admin",
+        "passwordHash": "REEMPLAZAR"
+      },
+      {
+        "id": "operador",
+        "role": "operator",
+        "passwordHash": "REEMPLAZAR"
+      }
+    ]
+  }
+}
