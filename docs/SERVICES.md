@@ -8,7 +8,7 @@ El QA valida la salida contra la fuente **antes** de permitir `job:deliver`.
 | --- | --- | --- | --- |
 | `simulate-service` | ninguna | `resultado.txt` | (checks genericos) |
 | `excel-service` | `*.xlsx` (unico) | `resultado-normalizado.xlsx` | `Test-PwxExcelOutput` |
-| `word-service` | `*.txt` / `*.md` (opcional) | `documento.docx` | `Test-PwxWordOutput` |
+| `word-service` | `*.txt` / `*.md` (opcional) | `documento-profesional.docx` | `Test-PwxWordOutput` |
 | `pdf-service` | `*.txt` / `*.md` (opcional) | `documento.pdf` | `Test-PwxPdfOutput` |
 | `data-service` | `*.csv` (unico) | `datos-limpios.csv` + `informe-limpieza.txt` | `Test-PwxDataOutput` |
 | `construction-service` | `*.csv` (unico) | `presupuesto.xlsx` | `Test-PwxConstructionOutput` |
@@ -41,10 +41,14 @@ ejercitar QA negativo).
 
 ## word-service
 
-- Escritor OOXML propio: `[Content_Types].xml`, `_rels/.rels`, `word/document.xml`
-  (orden fijo, UTF-8 sin BOM, timestamp ZIP fijo).
-- Un parrafo de entrada = un `<w:p>`; texto escapado XML; lineas vacias preservadas.
-- QA: estructura valida + **secuencia de parrafos identica** (igualdad ordinal) a la fuente.
+- Implementacion propia del panel/CLI: convierte contenido `.txt`/`.md` (listas,
+  encabezados, viñetas preservadas entre codificaciones) a un `.docx` profesional
+  (`documento-profesional.docx`) con escritor OOXML determinista (UTF-8 sin BOM,
+  timestamp ZIP fijo).
+- Sin archivo de entrada usa un fallback: descripcion del pedido + objetivo de
+  requisitos. Varias entradas de texto -> `WORD_MULTIPLE_TEXT_INPUTS`.
+- QA: exactamente un `.docx` de salida + estructura OOXML valida
+  (`Test-PwxWordOutput`). Detalle en [docs/WORD_SERVICE.md](WORD_SERVICE.md).
 
 ## pdf-service
 
@@ -101,6 +105,7 @@ con `SERVICE_NOT_IMPLEMENTED` (hoy los 6 estan en `true`).
 
 ## Codigos de error de servicios de texto
 
-`WORD_*` / `PDF_*`: `NO_INPUT`, `EMPTY_INPUT`, `MULTIPLE_INPUTS`, `UNSUPPORTED_FORMAT`,
-`BAD_INPUT` (nombre de candidato invalido), `NOT_ZIP`/`BAD_XML`/`MISSING_PARTS` (docx),
-`LIMITS_EXCEEDED`, `INTERNAL`.
+`PDF_*`: `NO_INPUT`, `EMPTY_INPUT`, `MULTIPLE_INPUTS`, `UNSUPPORTED_FORMAT`,
+`BAD_INPUT` (nombre de candidato invalido), `LIMITS_EXCEEDED`, `INTERNAL`.
+`WORD_*` (implementacion propia de word): `WORD_MULTIPLE_TEXT_INPUTS`,
+`WORD_INPUT_TOO_LARGE`, `WORD_INPUT_UNREADABLE`, `WORD_INPUT_EMPTY`, `WORD_WRITE_FAILED`.

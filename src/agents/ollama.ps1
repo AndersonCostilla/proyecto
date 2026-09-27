@@ -38,6 +38,43 @@ function Add-PwxOllamaSystemMessage {
     return $Msg
 }
 
+function Get-PwxOllamaErrorInfo {
+    param([object]$ErrorRecord)
+    $status = 0
+    $detail = ''
+    $exception = $ErrorRecord.Exception
+
+    try {
+        if ($exception -and $exception.Response -and $exception.Response.StatusCode) {
+            $status = [int]$exception.Response.StatusCode
+        }
+    }
+    catch { }
+    try {
+        if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
+            $detail = [string]$ErrorRecord.ErrorDetails.Message
+        }
+    }
+    catch { }
+    try {
+        if (-not $detail -and $exception -and $exception.Message) {
+            $detail = [string]$exception.Message
+        }
+    }
+    catch { }
+    return [pscustomobject]@{ status = $status; detail = $detail }
+}
+
+function Invoke-PwxOllamaChatRequest {
+    param(
+        [Parameter(Mandatory)][object]$Body,
+        [Parameter(Mandatory)][object]$Config
+    )
+    return Invoke-RestMethod -Uri ($Config.OllamaBaseUrl + '/api/chat') -Method Post `
+        -ContentType 'application/json' -Body ($Body | ConvertTo-Json -Depth 20) `
+        -TimeoutSec $Config.RequestTimeoutSec
+}
+
 function Invoke-PwxOllamaChat {
     param(
         [Parameter(Mandatory)][string]$Prompt,
@@ -68,49 +105,69 @@ function Invoke-PwxOllamaChat {
         )
         options  = @{ temperature = $Temperature }
     }
-    if ($FormatJson) {
-        $body.format = 'json'
-    }
+    if ($FormatJson) { $body.format = 'json' }
 
+    $resp = $null
+    $failure = $null
+    $formatFallback = $false
     try {
-        $resp = Invoke-RestMethod -Uri ($cfg.OllamaBaseUrl + '/api/chat') -Method Post `
-            -ContentType 'application/json' -Body ($body | ConvertTo-Json -Depth 20) `
-            -TimeoutSec $cfg.RequestTimeoutSec
-        if ($null -eq $resp.message -or [string]::IsNullOrWhiteSpace($resp.message.content)) {
-            return [pscustomobject]@{
-                ok      = $false
-                code    = 'MODEL_INVALID_RESPONSE'
-                content = $null
-                error   = 'Respuesta vacia del modelo'
-            }
-        }
-        return [pscustomobject]@{
-            ok      = $true
-            code    = 'OK'
-            content = $resp.message.content
-            error   = $null
-        }
+        $resp = Invoke-PwxOllamaChatRequest -Body $body -Config $cfg
     }
     catch {
+        $failure = $_
+    }
+
+    # Algunas versiones o modelos de Ollama rechazan format=json con HTTP 400.
+    # Se reintenta una única vez sin ese parámetro; el llamador sigue validando
+    # el JSON recibido, por lo que nunca se acepta texto libre como especificación.
+    if ($failure -and $FormatJson) {
+        $firstInfo = Get-PwxOllamaErrorInfo -ErrorRecord $failure
+        if ($firstInfo.status -eq 400) {
+            [void]$body.Remove('format')
+            try {
+                $resp = Invoke-PwxOllamaChatRequest -Body $body -Config $cfg
+                $failure = $null
+                $formatFallback = $true
+            }
+            catch {
+                $failure = $_
+            }
+        }
+    }
+
+    if ($failure) {
+        $info = Get-PwxOllamaErrorInfo -ErrorRecord $failure
         $code = 'MODEL_ERROR'
-        if ($_.Exception -is [System.Net.WebException]) {
-            $status = 0
-            try { $status = [int]$_.Exception.Response.StatusCode } catch { $status = 0 }
-            if ($status -eq 404) { $code = 'MODEL_NOT_FOUND' }
-            elseif ($status -eq 400) { $code = 'MODEL_ERROR' }
-            elseif ($status -ge 500 -and $status -lt 600) { $code = 'MODEL_ERROR' }
-            elseif ($_.Exception.Message -match 'timed out|Timeout') { $code = 'MODEL_TIMEOUT' }
-            else { $code = 'OLLAMA_OFFLINE' }
+        if ($info.status -eq 404) { $code = 'MODEL_NOT_FOUND' }
+        elseif ($info.status -eq 400) { $code = 'MODEL_ERROR' }
+        elseif ($info.status -ge 500 -and $info.status -lt 600) { $code = 'MODEL_ERROR' }
+        elseif ($info.detail -match 'timed out|Timeout') { $code = 'MODEL_TIMEOUT' }
+        elseif ($failure.Exception -is [System.Net.WebException]) { $code = 'OLLAMA_OFFLINE' }
+        $errorText = if ($info.detail) { "Ollama HTTP $($info.status): $($info.detail)" } else { 'Error sin detalle al invocar Ollama' }
+        return [pscustomobject]@{
+            ok       = $false
+            code     = $code
+            content  = $null
+            error    = $errorText
+            format_fallback = $formatFallback
         }
-        elseif ($_.Exception.Message -match 'timed out|Timeout') {
-            $code = 'MODEL_TIMEOUT'
-        }
+    }
+
+    if ($null -eq $resp.message -or [string]::IsNullOrWhiteSpace($resp.message.content)) {
         return [pscustomobject]@{
             ok      = $false
-            code    = $code
+            code    = 'MODEL_INVALID_RESPONSE'
             content = $null
-            error   = $_.Exception.Message
+            error   = 'Respuesta vacia del modelo'
+            format_fallback = $formatFallback
         }
+    }
+    return [pscustomobject]@{
+        ok      = $true
+        code    = 'OK'
+        content = $resp.message.content
+        error   = $null
+        format_fallback = $formatFallback
     }
 }
 

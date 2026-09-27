@@ -156,3 +156,34 @@ Run-PwxTest -Name 'D7/T11: JSON invalido por canal real deja BLOCKED' -File 'uni
 
 Remove-Item -Path 'function:Invoke-RestMethod' -ErrorAction SilentlyContinue
 Remove-Item -Path 'function:Reset-PwxRestQueue' -ErrorAction SilentlyContinue
+# This test is intentionally placed after the original mock helper cleanup so it
+# uses a local mock and proves the JSON-format compatibility retry.
+function Invoke-RestMethod {
+    param($Uri, [string]$Method = 'Get', $ContentType, $Body, [int]$TimeoutSec = 100)
+    $idx = $global:PwxRetryQueueIndex
+    $global:PwxRetryQueueIndex++
+    $item = $global:PwxRetryQueue[$idx]
+    if ($item.kind -eq 'ok') { return ($item.body | ConvertFrom-Json) }
+    $fr = New-Object FakePwxWebResponse
+    $fr.StatusCode = [System.Net.HttpStatusCode]400
+    throw (New-Object System.Net.WebException('HTTP status 400', $null, [System.Net.WebExceptionStatus]::ProtocolError, $fr))
+}
+
+Run-PwxTest -Name 'D7: format json HTTP 400 reintenta sin format y conserva validacion' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    $global:PwxRetryQueue = @(
+        @{ kind = 'ok'; body = '{"models":[{"name":"qwen3:8b"}]}' },
+        @{ kind = 'status'; status = '400' },
+        @{ kind = 'ok'; body = '{"message":{"content":"{\"service\":\"simulate-service\"}"}}' }
+    )
+    $global:PwxRetryQueueIndex = 0
+    Set-PwxOllamaEnv
+    $res = Invoke-PwxOllamaChat -Prompt 'devuelve json' -FormatJson $true
+    Assert-PwxTrue $res.ok
+    Assert-PwxTrue $res.format_fallback 'Debe reportar reintento de compatibilidad'
+    Assert-PwxEqual '{"service":"simulate-service"}' $res.content
+}
+
+Remove-Item -Path 'function:Invoke-RestMethod' -ErrorAction SilentlyContinue

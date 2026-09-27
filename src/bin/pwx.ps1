@@ -31,9 +31,18 @@ ESTADO DEL TRABAJO
   NEW -> REQUIREMENTS -> READY_FOR_PRODUCTION -> IN_PROGRESS -> QA -> READY_FOR_DELIVERY -> DELIVERED -> COMPLETED
   Extra: BLOCKED | REWORK | CANCELLED
 
-SERVICIOS:
+SERVICIOS Y COTIZACIÓN:
   services:list
-  price:calc        -ServiceId <id> [-Addons rush,extra]
+  price:calc        -ServiceId <id> [-Addons rush,extra]  (precio base histórico)
+  quote:calc        -ServiceId <id> [-Addons rush,extra] [-Complexity basic|standard|advanced|expert] [-Units 1] [-DiscountPct 0]
+
+PAGOS MANUALES:
+  payment:methods
+  payment:request   -JobId <id> -Method <nequi|bank-transfer> [-Addons rush,extra] [-Complexity standard] [-Units 1] [-DiscountPct 0]
+  payment:show      -JobId <id>
+  payment:proof     -JobId <id> -Path <comprobante.png|jpg|pdf> [-Reference <referencia>]
+  payment:approve   -JobId <id> [-By <operador>]
+  payment:reject    -JobId <id> -Reason <motivo> [-By <operador>]
 
 OUTBOX:
   outbox:new        -Recipient <dest> -Subject <asunto> -Body <texto> [-Type message] [-JobId <id>]
@@ -42,6 +51,9 @@ OUTBOX:
   outbox:approve    -Id <msg-id> -By <quien>
   outbox:send       -Id <msg-id>
   outbox:export     [-Status DRAFT] [-Path <ruta>]  (exporta borradores DRAFT a workspace/exports; solo lectura, no envia)
+
+PANEL WEB LOCAL:
+  web:start         [-Port 8787]  (solo 127.0.0.1; no exponer a Internet)
 
 SISTEMA:
   config:show
@@ -209,6 +221,85 @@ switch ($cmd) {
         $price | ConvertTo-Json -Depth 5
         exit 0
     }
+    'quote:calc' {
+        $serviceId = Read-PwxFlag -FlagList $rest -Name '-ServiceId'
+        $addonsRaw = Read-PwxFlag -FlagList $rest -Name '-Addons'
+        $complexity = Read-PwxFlag -FlagList $rest -Name '-Complexity'
+        $unitsRaw = Read-PwxFlag -FlagList $rest -Name '-Units'
+        $discountRaw = Read-PwxFlag -FlagList $rest -Name '-DiscountPct'
+        if (-not $serviceId) { throw 'Falta -ServiceId' }
+        if (-not $complexity) { $complexity = 'standard' }
+        $addons = @()
+        if ($addonsRaw) { $addons = @($addonsRaw -split ',') }
+        $units = 1
+        if ($unitsRaw) { $units = [int]$unitsRaw }
+        $discountPct = 0.0
+        if ($discountRaw) { $discountPct = [double]$discountRaw }
+        $quote = Get-PwxQuote -ServiceId $serviceId -Addons $addons -Complexity $complexity -Units $units -DiscountPct $discountPct
+        $quote | ConvertTo-Json -Depth 6
+        exit 0
+    }
+    'payment:methods' {
+        $methods = Get-PwxPaymentMethods
+        $methods | ConvertTo-Json -Depth 5
+        exit 0
+    }
+    'payment:request' {
+        $jobId = Read-PwxFlag -FlagList $rest -Name '-JobId'
+        $method = Read-PwxFlag -FlagList $rest -Name '-Method'
+        $addonsRaw = Read-PwxFlag -FlagList $rest -Name '-Addons'
+        $complexity = Read-PwxFlag -FlagList $rest -Name '-Complexity'
+        $unitsRaw = Read-PwxFlag -FlagList $rest -Name '-Units'
+        $discountRaw = Read-PwxFlag -FlagList $rest -Name '-DiscountPct'
+        if (-not $jobId) { throw 'Falta -JobId' }
+        if (-not $method) { throw 'Falta -Method' }
+        if (-not $complexity) { $complexity = 'standard' }
+        $addons = @()
+        if ($addonsRaw) { $addons = @($addonsRaw -split ',') }
+        $units = 1
+        if ($unitsRaw) { $units = [int]$unitsRaw }
+        $discountPct = 0.0
+        if ($discountRaw) { $discountPct = [double]$discountRaw }
+        $payment = New-PwxPaymentRequest -JobId $jobId -Method $method -Addons $addons -Complexity $complexity -Units $units -DiscountPct $discountPct
+        $payment | ConvertTo-Json -Depth 10
+        exit 0
+    }
+    'payment:show' {
+        $jobId = Read-PwxFlag -FlagList $rest -Name '-JobId'
+        if (-not $jobId) { throw 'Falta -JobId' }
+        $payments = Get-PwxPaymentsForJob -JobId $jobId
+        if ($payments.Count -eq 0) { Write-Host '(sin pagos)' }
+        else { $payments | ConvertTo-Json -Depth 10 }
+        exit 0
+    }
+    'payment:proof' {
+        $jobId = Read-PwxFlag -FlagList $rest -Name '-JobId'
+        $path = Read-PwxFlag -FlagList $rest -Name '-Path'
+        $reference = Read-PwxFlag -FlagList $rest -Name '-Reference'
+        if (-not $jobId) { throw 'Falta -JobId' }
+        if (-not $path) { throw 'Falta -Path' }
+        $payment = Submit-PwxPaymentProof -JobId $jobId -Path $path -Reference $reference
+        $payment | ConvertTo-Json -Depth 10
+        exit 0
+    }
+    'payment:approve' {
+        $jobId = Read-PwxFlag -FlagList $rest -Name '-JobId'
+        $by = Read-PwxFlag -FlagList $rest -Name '-By'
+        if (-not $jobId) { throw 'Falta -JobId' }
+        $payment = Approve-PwxPayment -JobId $jobId -By $by
+        $payment | ConvertTo-Json -Depth 10
+        exit 0
+    }
+    'payment:reject' {
+        $jobId = Read-PwxFlag -FlagList $rest -Name '-JobId'
+        $reason = Read-PwxFlag -FlagList $rest -Name '-Reason'
+        $by = Read-PwxFlag -FlagList $rest -Name '-By'
+        if (-not $jobId) { throw 'Falta -JobId' }
+        if (-not $reason) { throw 'Falta -Reason' }
+        $payment = Reject-PwxPayment -JobId $jobId -Reason $reason -By $by
+        $payment | ConvertTo-Json -Depth 10
+        exit 0
+    }
     'outbox:new' {
         $recipient = Read-PwxFlag -FlagList $rest -Name '-Recipient'
         $subject = Read-PwxFlag -FlagList $rest -Name '-Subject'
@@ -333,6 +424,13 @@ switch ($cmd) {
         if (-not $leadId) { throw 'Falta -LeadId' }
         $result = Convert-PwxLeadToClient -LeadId $leadId
         $result | ConvertTo-Json -Depth 5
+        exit 0
+    }
+    'web:start' {
+        $portRaw = Read-PwxFlag -FlagList $rest -Name '-Port'
+        $port = 8787
+        if ($portRaw) { $port = [int]$portRaw }
+        Start-PwxWebServer -Port $port
         exit 0
     }
     'config:show' {

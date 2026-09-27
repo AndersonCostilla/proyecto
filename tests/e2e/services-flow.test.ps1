@@ -60,7 +60,7 @@ Run-PwxTest -Name 'E2E: word-service ciclo completo hasta DELIVERED' -File 'e2e\
     $ws = New-PwxTestWorkspace
     $env:PWX_WORKSPACE = $ws
     Invoke-PwxBootstrap
-    Invoke-PwxE2EServiceCycle -Service 'word-service' -Fixture 'muestra.txt' -TargetName 'entrada.txt' -InputFiles @('entrada.txt') -RequiredOutput @('documento.docx') -DeliveredFile 'documento.docx'
+    Invoke-PwxE2EServiceCycle -Service 'word-service' -Fixture 'muestra.txt' -TargetName 'entrada.txt' -InputFiles @('entrada.txt') -RequiredOutput @('*.docx') -DeliveredFile 'documento-profesional.docx'
 }
 
 Run-PwxTest -Name 'E2E: pdf-service ciclo completo hasta DELIVERED' -File 'e2e\services' -Body {
@@ -88,5 +88,5 @@ Run-PwxTest -Name 'E2E: word-service sin input tambien llega a DELIVERED (desde 
     $ws = New-PwxTestWorkspace
     $env:PWX_WORKSPACE = $ws
     Invoke-PwxBootstrap
-    Invoke-PwxE2EServiceCycle -Service 'word-service' -Fixture '' -TargetName '' -InputFiles @() -RequiredOutput @('documento.docx') -DeliveredFile 'documento.docx'
+    Invoke-PwxE2EServiceCycle -Service 'word-service' -Fixture '' -TargetName '' -InputFiles @() -RequiredOutput @('*.docx') -DeliveredFile 'documento-profesional.docx'
 }

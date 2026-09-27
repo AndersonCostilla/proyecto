@@ -17,6 +17,7 @@ $moduleFiles = @(
     'core\state.ps1',
     'core\store.ps1',
     'core\pricing.ps1',
+    'core\payments.ps1',
     'core\outbox.ps1',
     'core\leads.ps1',
     'core\qa.ps1',
@@ -32,7 +33,8 @@ $moduleFiles = @(
     'services\word.ps1',
     'services\pdf.ps1',
     'services\data.ps1',
-    'services\construction.ps1'
+    'services\construction.ps1',
+    'web\server.ps1'
 )
 
 foreach ($rel in $moduleFiles) {

@@ -1,0 +1,19 @@
+{
+  "currency": "COP",
+  "methods": {
+    "nequi": {
+      "name": "Nequi",
+      "enabled": false,
+      "recipient": "",
+      "instructions": "Configure el número o identificador Nequi del negocio antes de habilitar este método.",
+      "qr_path": ""
+    },
+    "bank-transfer": {
+      "name": "Transferencia bancaria",
+      "enabled": false,
+      "recipient": "",
+      "instructions": "Configure los datos de la cuenta empresarial antes de habilitar este método.",
+      "qr_path": ""
+    }
+  }
+}

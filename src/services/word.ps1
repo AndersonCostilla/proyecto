@@ -1,13 +1,5 @@
-# word-service: genera un .docx valido (OOXML) de forma determinista.
-# Entrada: archivo .txt/.md en job/input/ o, en su defecto, la especificacion
-# de requisitos (objetivo + constraints). Salida: output/documento.docx.
-
-$ErrorActionPreference = 'Stop'
-
-$PwxWordOutputName = 'documento.docx'
-$PwxWordMaxParagraphs = 20000
-$PwxWordMaxEntryBytes = 52428800
-# Timestamp fijo para entradas ZIP (ver comentario en excel.ps1): determinismo binario.
+$PwxWordMaxInputBytes = 1048576
+$PwxWordOutputName = 'documento-profesional.docx'
 [DateTimeOffset]$PwxWordZipTimestamp = [DateTimeOffset]::new(2000, 1, 1, 0, 0, 0, [TimeSpan]::Zero)
 
 function Initialize-PwxWordTypes {
@@ -16,248 +8,234 @@ function Initialize-PwxWordTypes {
 }
 
 function ConvertTo-PwxWordXmlText {
-    param([string]$Text)
+    param([AllowNull()][string]$Text)
     if ($null -eq $Text) { return '' }
-    $sb = New-Object System.Text.StringBuilder
-    foreach ($ch in $Text.ToCharArray()) {
-        $c = [int][char]$ch
-        if (($c -eq 0x09) -or ($c -eq 0x0A) -or ($c -eq 0x0D) -or ($c -ge 0x20)) {
-            [void]$sb.Append($ch)
+    return [System.Security.SecurityElement]::Escape($Text)
+}
+
+function ConvertTo-PwxWordParagraphXml {
+    param(
+        [Parameter(Mandatory)][string]$Text,
+        [string]$Style = 'Normal',
+        [string]$PrefixXml = ''
+    )
+    $safe = ConvertTo-PwxWordXmlText -Text $Text
+    return ('<w:p><w:pPr><w:pStyle w:val="{0}"/></w:pPr><w:r><w:t xml:space="preserve">{1}{2}</w:t></w:r></w:p>' -f $Style, $PrefixXml, $safe)
+}
+
+function ConvertTo-PwxWordDocumentBody {
+    param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][object]$Job)
+    $paragraphs = New-Object System.Collections.ArrayList
+    $lines = $Text -split "`r?`n"
+    $hasMeaningfulText = $false
+    foreach ($lineRaw in $lines) {
+        $line = [string]$lineRaw
+        $trimmed = $line.Trim()
+        if (-not $trimmed) { continue }
+        $style = 'Normal'
+        $content = $trimmed
+        $prefixXml = ''
+        if ($trimmed -match '^###\s+(.+)$') { $style = 'Heading2'; $content = $matches[1].Trim() }
+        elseif ($trimmed -match '^##\s+(.+)$') { $style = 'Heading1'; $content = $matches[1].Trim() }
+        elseif ($trimmed -match '^#\s+(.+)$') { $style = 'Title'; $content = $matches[1].Trim() }
+        elseif ($trimmed -match '^[-*]\s+(.+)$') {
+            $style = 'List'
+            $content = $matches[1].Trim()
+            # Entidad XML numérica para evitar que Windows PowerShell 5.1
+            # convierta el glifo de viñeta con una página de códigos ANSI.
+            $prefixXml = '&#x2022; '
         }
+        [void]$paragraphs.Add((ConvertTo-PwxWordParagraphXml -Text $content -Style $style -PrefixXml $prefixXml))
+        $hasMeaningfulText = $true
     }
-    $s = $sb.ToString()
-    $s = $s.Replace('&', '&amp;')
-    $s = $s.Replace('<', '&lt;')
-    $s = $s.Replace('>', '&gt;')
-    return $s
+    if (-not $hasMeaningfulText) {
+        [void]$paragraphs.Add((ConvertTo-PwxWordParagraphXml -Text 'Documento profesional' -Style 'Title'))
+        [void]$paragraphs.Add((ConvertTo-PwxWordParagraphXml -Text $Job.description -Style 'Normal'))
+    }
+    return ($paragraphs -join '')
 }
 
-function Test-PwxWordZipArchivePart {
-    param([System.IO.Compression.ZipArchive]$Zip, [string]$EntryName)
-    foreach ($e in $Zip.Entries) {
-        if ($e.FullName -eq $EntryName) { return $true }
+function Get-PwxWordSourceText {
+    param([Parameter(Mandatory)][string]$JobId)
+    $found = Find-PwxJob -JobId $JobId
+    if (-not $found) { throw "Trabajo inexistente: $JobId" }
+    $inputDir = Join-Path $found.JobDir 'input'
+    $sources = @(Get-ChildItem -LiteralPath $inputDir -File -ErrorAction SilentlyContinue | Where-Object {
+        $_.Extension.ToLowerInvariant() -in @('.txt', '.md')
+    })
+    if ($sources.Count -gt 1) {
+        return [pscustomobject]@{ ok = $false; error = 'WORD_MULTIPLE_TEXT_INPUTS'; detail = 'Adjunta un solo archivo .txt o .md para producir el documento Word.' }
     }
-    return $false
-}
-
-function Read-PwxWordZipEntryText {
-    param([System.IO.Compression.ZipArchive]$Zip, [string]$EntryName, [long]$MaxBytes)
-    $entry = $null
-    foreach ($e in $Zip.Entries) {
-        if ($e.FullName -eq $EntryName) { $entry = $e; break }
-    }
-    if ($null -eq $entry) { return $null }
-    if ($entry.Length -gt $MaxBytes) {
-        return [pscustomobject]@{ error = 'WORD_LIMITS_EXCEEDED'; detail = "Part '$EntryName' demasiado grande ($($entry.Length) bytes)" }
-    }
-    $s = $entry.Open()
-    try {
-        $ms = New-Object System.IO.MemoryStream
+    if ($sources.Count -eq 1) {
+        $source = $sources[0]
+        if ($source.Length -gt $PwxWordMaxInputBytes) {
+            return [pscustomobject]@{ ok = $false; error = 'WORD_INPUT_TOO_LARGE'; detail = "El archivo supera $PwxWordMaxInputBytes bytes." }
+        }
         try {
-            $s.CopyTo($ms)
-            return [System.Text.Encoding]::UTF8.GetString($ms.ToArray())
+            $text = [System.IO.File]::ReadAllText($source.FullName, [System.Text.Encoding]::UTF8)
         }
-        finally { $ms.Dispose() }
+        catch {
+            return [pscustomobject]@{ ok = $false; error = 'WORD_INPUT_UNREADABLE'; detail = $_.Exception.Message }
+        }
+        if ([string]::IsNullOrWhiteSpace($text)) {
+            return [pscustomobject]@{ ok = $false; error = 'WORD_INPUT_EMPTY'; detail = 'El archivo de texto está vacío.' }
+        }
+        return [pscustomobject]@{ ok = $true; text = $text; source = $source.Name }
     }
-    finally { $s.Dispose() }
+
+    $job = Get-PwxJob -JobId $JobId
+    $fallback = "# Documento profesional`n`n$($job.description)"
+    if ($job.requirements -and $job.requirements.objective) {
+        $fallback += "`n`n## Objetivo`n$($job.requirements.objective)"
+    }
+    return [pscustomobject]@{ ok = $true; text = $fallback; source = 'descripción del pedido' }
 }
 
-# Escritor determinista del .docx: partes en orden fijo, UTF-8 sin BOM,
-# timestamp ZIP constante. El mismo input produce bytes identicos.
-function Write-PwxWordDoc {
-    param([string]$Path, [string[]]$Paragraphs)
+function Add-PwxWordZipTextEntry {
+    param(
+        [Parameter(Mandatory)][System.IO.Compression.ZipArchive]$Zip,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Content
+    )
+    $entry = $Zip.CreateEntry($Name, [System.IO.Compression.CompressionLevel]::Optimal)
+    $entry.LastWriteTime = $PwxWordZipTimestamp
+    $stream = $entry.Open()
+    try {
+        $writer = New-Object System.IO.StreamWriter($stream, (New-Object System.Text.UTF8Encoding($false)))
+        try { $writer.Write($Content) }
+        finally { $writer.Dispose() }
+    }
+    finally { $stream.Dispose() }
+}
+
+function Write-PwxWordDocument {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$BodyXml,
+        [Parameter(Mandatory)][string]$Title
+    )
     Initialize-PwxWordTypes
-
-    $sb = New-Object System.Text.StringBuilder
-    [void]$sb.Append('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')
-    [void]$sb.Append('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>')
-    foreach ($p in @($Paragraphs)) {
-        if ([string]::IsNullOrEmpty($p)) {
-            [void]$sb.Append('<w:p/>')
-        }
-        else {
-            [void]$sb.Append('<w:p><w:r><w:t xml:space="preserve">')
-            [void]$sb.Append((ConvertTo-PwxWordXmlText -Text $p))
-            [void]$sb.Append('</w:t></w:r></w:p>')
-        }
-    }
-    [void]$sb.Append('<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>')
-    [void]$sb.Append('</w:body></w:document>')
-
-    $parts = [ordered]@{
-        '[Content_Types].xml' = @'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>
-'@
-        '_rels/.rels' = @'
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>
-'@
-        'word/document.xml' = $sb.ToString()
-    }
-
-    $tmp = Join-Path ([System.IO.Path]::GetDirectoryName($Path)) ('.' + ([System.IO.Path]::GetFileName($Path)) + '.' + [guid]::NewGuid().ToString('N') + '.tmp')
+    $parent = Split-Path -Parent $Path
+    New-PwxDirectory -Path $parent | Out-Null
+    if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force }
+    $file = [System.IO.File]::Open($Path, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite)
     try {
-        $zip = [System.IO.Compression.ZipFile]::Open($tmp, [System.IO.Compression.ZipArchiveMode]::Create)
+        $zip = New-Object System.IO.Compression.ZipArchive($file, [System.IO.Compression.ZipArchiveMode]::Create, $true)
         try {
-            foreach ($entry in $parts.Keys) {
-                $e = $zip.CreateEntry($entry, [System.IO.Compression.CompressionLevel]::Optimal)
-                $e.LastWriteTime = $PwxWordZipTimestamp
-                $s = $e.Open()
-                try {
-                    $bytes = [System.Text.Encoding]::UTF8.GetBytes([string]$parts[$entry])
-                    $s.Write($bytes, 0, $bytes.Length)
-                }
-                finally { $s.Dispose() }
-            }
+            $contentTypes = @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>
+'@
+            $rootRels = @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>
+'@
+            $documentRels = @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>
+'@
+            $styles = @'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>
+  <w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="36"/><w:color w:val="24243A"/></w:rPr><w:pPr><w:spacing w:after="240"/></w:pPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="Heading 1"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="4F46C8"/></w:rPr><w:pPr><w:spacing w:before="220" w:after="120"/></w:pPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="Heading 2"/><w:basedOn w:val="Normal"/><w:rPr><w:b/><w:sz w:val="24"/><w:color w:val="50566B"/></w:rPr><w:pPr><w:spacing w:before="160" w:after="80"/></w:pPr></w:style>
+  <w:style w:type="paragraph" w:styleId="List"><w:name w:val="List"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="360" w:hanging="180"/><w:spacing w:after="60"/></w:pPr></w:style>
+</w:styles>
+'@
+            $safeTitle = ConvertTo-PwxWordXmlText -Text $Title
+            $document = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>{0}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>' -f $BodyXml)
+            $timestamp = '2000-01-01T00:00:00Z'
+            $core = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>{0}</dc:title><dc:creator>PWX</dc:creator><cp:lastModifiedBy>PWX</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">{1}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">{1}</dcterms:modified></cp:coreProperties>' -f $safeTitle, $timestamp)
+            $app = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>PWX</Application></Properties>'
+            Add-PwxWordZipTextEntry -Zip $zip -Name '[Content_Types].xml' -Content $contentTypes
+            Add-PwxWordZipTextEntry -Zip $zip -Name '_rels/.rels' -Content $rootRels
+            Add-PwxWordZipTextEntry -Zip $zip -Name 'word/document.xml' -Content $document
+            Add-PwxWordZipTextEntry -Zip $zip -Name 'word/_rels/document.xml.rels' -Content $documentRels
+            Add-PwxWordZipTextEntry -Zip $zip -Name 'word/styles.xml' -Content $styles
+            Add-PwxWordZipTextEntry -Zip $zip -Name 'docProps/core.xml' -Content $core
+            Add-PwxWordZipTextEntry -Zip $zip -Name 'docProps/app.xml' -Content $app
         }
         finally { $zip.Dispose() }
-        if (Test-Path -LiteralPath $Path) {
-            Remove-Item -LiteralPath $Path -Force
-        }
-        [System.IO.File]::Move($tmp, $Path)
     }
-    catch {
-        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
-        throw
-    }
+    finally { $file.Dispose() }
 }
 
-# Lectura del .docx: devuelve la lista de parrafos (texto de cada w:p).
-function Read-PwxWordDoc {
-    param([string]$Path)
+function Test-PwxWordOutput {
+    param([Parameter(Mandatory)][string]$JobId)
+    $found = Find-PwxJob -JobId $JobId
+    if (-not $found) { return [pscustomobject]@{ ok = $false; detail = "Trabajo inexistente: $JobId" } }
+    $output = Join-Path $found.JobDir 'output'
+    $files = @(Get-ChildItem -LiteralPath $output -File -Filter '*.docx' -ErrorAction SilentlyContinue)
+    if ($files.Count -ne 1) { return [pscustomobject]@{ ok = $false; detail = 'Se esperaba exactamente un archivo .docx de salida.' } }
     Initialize-PwxWordTypes
     $zip = $null
     try {
-        $zip = [System.IO.Compression.ZipFile]::OpenRead($Path)
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($files[0].FullName)
+        $required = @('[Content_Types].xml', '_rels/.rels', 'word/document.xml', 'word/styles.xml')
+        foreach ($name in $required) {
+            if (-not ($zip.Entries | Where-Object { $_.FullName -eq $name })) {
+                return [pscustomobject]@{ ok = $false; detail = "El documento Word no contiene $name" }
+            }
+        }
+        $entry = $zip.Entries | Where-Object { $_.FullName -eq 'word/document.xml' } | Select-Object -First 1
+        $stream = $entry.Open()
+        try {
+            $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
+            try { $xmlText = $reader.ReadToEnd() }
+            finally { $reader.Dispose() }
+        }
+        finally { $stream.Dispose() }
+        [xml]$xml = $xmlText
+        $textNodes = @($xml.SelectNodes('//*[local-name()="t"]'))
+        if ($textNodes.Count -eq 0) { return [pscustomobject]@{ ok = $false; detail = 'El documento Word no contiene texto.' } }
+        return [pscustomobject]@{ ok = $true; detail = "$($files[0].Name): $($textNodes.Count) nodos de texto" }
     }
     catch {
-        return (New-PwxServiceError -Code 'WORD_NOT_ZIP' -Detail $_.Exception.Message)
-    }
-    try {
-        $missing = @()
-        foreach ($part in @('[Content_Types].xml', '_rels/.rels', 'word/document.xml')) {
-            if (-not (Test-PwxWordZipArchivePart -Zip $zip -EntryName $part)) { $missing += $part }
-        }
-        if ($missing.Count -gt 0) {
-            return (New-PwxServiceError -Code 'WORD_MISSING_PARTS' -Detail ($missing -join ', '))
-        }
-        $docXml = Read-PwxWordZipEntryText -Zip $zip -EntryName 'word/document.xml' -MaxBytes $PwxWordMaxEntryBytes
-        if ($null -eq $docXml) {
-            return (New-PwxServiceError -Code 'WORD_MISSING_PARTS' -Detail 'word/document.xml')
-        }
-        if ($docXml -is [pscustomobject]) {
-            return (New-PwxServiceError -Code $docXml.error -Detail $docXml.detail)
-        }
-        $xml = $null
-        try {
-            $xml = [xml]$docXml
-        }
-        catch {
-            return (New-PwxServiceError -Code 'WORD_BAD_XML' -Detail $_.Exception.Message)
-        }
-        $ns = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
-        $ns.AddNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main')
-        $nodes = $xml.SelectNodes('//w:body/w:p', $ns)
-        $paragraphs = @()
-        foreach ($node in $nodes) {
-            $parts = $node.SelectNodes('.//w:t', $ns)
-            $text = ''
-            foreach ($t in $parts) { $text += $t.InnerText }
-            $paragraphs += $text
-        }
-        return [pscustomobject]@{
-            ok         = $true
-            code       = $null
-            detail     = $null
-            paragraphs = $paragraphs
-        }
+        return [pscustomobject]@{ ok = $false; detail = "DOCX inválido: $($_.Exception.Message)" }
     }
     finally {
-        if ($null -ne $zip) { $zip.Dispose() }
+        if ($zip) { $zip.Dispose() }
     }
 }
 
-# Contrato del servicio: @{ ok=$true|$false; error=$null|<codigo> }
 function Invoke-PwxService_word_service {
-    param([string]$JobId)
-    Initialize-PwxWordTypes
+    param([Parameter(Mandatory)][string]$JobId)
+    $job = Get-PwxJob -JobId $JobId
+    if (-not $job) { return [pscustomobject]@{ ok = $false; error = 'JOB_NOT_FOUND' } }
+    $source = Get-PwxWordSourceText -JobId $JobId
+    if (-not $source.ok) {
+        Write-PwxLog -Component 'service.word' -Level 'WARN' -Message "Word no producido: $($source.error)" -JobId $JobId
+        return [pscustomobject]@{ ok = $false; error = $source.error; detail = $source.detail }
+    }
+    $found = Find-PwxJob -JobId $JobId
+    $output = Assert-PwxSafeWorkspacePath -WorkspacePath $found.JobDir -Path (Join-Path $found.JobDir ('output\' + $PwxWordOutputName))
     try {
-        $resolve = Resolve-PwxTextJobSource -JobId $JobId -CodePrefix 'WORD'
-        if (-not $resolve.ok) {
-            return [pscustomobject]@{ ok = $false; error = $resolve.code }
-        }
-
-        $paragraphs = if ($resolve.source -eq 'file') { @(Get-PwxTextFileParagraphs -Path $resolve.path) } else { @($resolve.paragraphs) }
-        if ($paragraphs.Count -eq 0) {
-            return [pscustomobject]@{ ok = $false; error = 'WORD_EMPTY_INPUT' }
-        }
-        if ($paragraphs.Count -gt $PwxWordMaxParagraphs) {
-            return [pscustomobject]@{ ok = $false; error = 'WORD_LIMITS_EXCEEDED' }
-        }
-
-        $found = Find-PwxJob -JobId $JobId
-        $outputDir = Join-Path $found.JobDir 'output'
-        New-PwxDirectory -Path $outputDir | Out-Null
-
-        $finalPath = Join-Path $outputDir $PwxWordOutputName
-        Write-PwxWordDoc -Path $finalPath -Paragraphs $paragraphs
-
-        if (-not (Test-Path -LiteralPath $finalPath)) {
-            return [pscustomobject]@{ ok = $false; error = 'WORD_INTERNAL' }
-        }
-
-        Add-PwxJobFile -JobId $JobId -Bucket 'output' -Path $finalPath | Out-Null
-
-        $sha = Get-PwxSha256 -Path $finalPath
-        Add-PwxEvent -JobId $JobId -Component 'service.word' -Action 'word.generated' -Data @{
-            file       = $PwxWordOutputName
-            paragraphs = $paragraphs.Count
-            source     = $resolve.source
-            sha256     = $sha
-        }
-        Write-PwxLog -Component 'service.word' -Message "word-service genero $PwxWordOutputName para $JobId (parrafos=$($paragraphs.Count), fuente=$($resolve.source), sha256=$sha)" -JobId $JobId
-
-        return [pscustomobject]@{
-            ok         = $true
-            error      = $null
-            file       = $PwxWordOutputName
-            paragraphs = $paragraphs.Count
-            sha256     = $sha
-        }
+        $body = ConvertTo-PwxWordDocumentBody -Text $source.text -Job $job
+        $title = if ($job.requirements -and $job.requirements.objective) { [string]$job.requirements.objective } else { 'Documento profesional' }
+        Write-PwxWordDocument -Path $output -BodyXml $body -Title $title
+        Add-PwxJobFile -JobId $JobId -Bucket 'output' -Path $output | Out-Null
+        Write-PwxLog -Component 'service.word' -Message "Documento Word producido desde $($source.source)" -JobId $JobId
+        Add-PwxEvent -JobId $JobId -Component 'service.word' -Action 'document.produced' -Data @{ source = $source.source; output = $PwxWordOutputName }
+        return [pscustomobject]@{ ok = $true; output = $output; source = $source.source }
     }
     catch {
-        Write-PwxLog -Component 'service.word' -Level 'ERROR' -Message "word-service fallo: $($_.Exception.Message)" -JobId $JobId
-        return [pscustomobject]@{ ok = $false; error = 'WORD_INTERNAL' }
-    }
-}
-
-# Validador QA: estructura OOXML valida + parrafos identicos a la fuente.
-function Test-PwxWordOutput {
-    param([string]$JobId)
-    Initialize-PwxWordTypes
-    try {
-        $snap = @(Get-PwxOutputSnapshot -JobId $JobId)
-        $out = @($snap | Where-Object { $_.name -like '*.docx' })
-        if ($out.Count -eq 0) {
-            return (New-PwxServiceValidation $false 'No hay archivo .docx en output/')
-        }
-        if ($out.Count -gt 1) {
-            return (New-PwxServiceValidation $false 'Mas de un archivo .docx en output/')
-        }
-        $read = Read-PwxWordDoc -Path $out[0].full
-        if (-not $read.ok) {
-            return (New-PwxServiceValidation $false "$($read.code): $($read.detail)")
-        }
-        $totalChars = 0
-        foreach ($p in $read.paragraphs) { $totalChars += $p.Length }
-        if ($totalChars -eq 0) {
-            return (New-PwxServiceValidation $false 'Documento sin texto')
-        }
-        $expected = Get-PwxTextExpectedParagraphs -JobId $JobId
-        return (Compare-PwxParagraphSequence -Expected $expected -Actual $read.paragraphs)
-    }
-    catch {
-        return (New-PwxServiceValidation $false "WORD_INTERNAL: $($_.Exception.Message)")
+        Write-PwxLog -Component 'service.word' -Level 'ERROR' -Message "Error produciendo Word: $($_.Exception.Message)" -JobId $JobId
+        return [pscustomobject]@{ ok = $false; error = 'WORD_WRITE_FAILED'; detail = $_.Exception.Message }
     }
 }

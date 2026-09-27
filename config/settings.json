@@ -8,5 +8,8 @@
   "workspace": "store",
   "currency": "COP",
   "logLevel": "INFO",
-  "serviceCatalogFile": "config/services.json"
+  "serviceCatalogFile": "config/services.json",
+  "payments": {
+    "requireApprovalBeforeProduction": true
+  }
 }

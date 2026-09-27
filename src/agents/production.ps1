@@ -14,6 +14,15 @@ function Invoke-PwxProductionAgent {
     }
 
     $serviceId = $job.requirements.service
+    if (-not (Test-PwxPaymentConfirmed -JobId $JobId)) {
+        Write-PwxLog -Component 'payments' -Message "Producción bloqueada por pago pendiente: $JobId" -JobId $JobId
+        return [pscustomobject]@{
+            ok    = $false
+            state = $job.state
+            error = 'PAYMENT_REQUIRED'
+            qa    = $null
+        }
+    }
     Set-PwxJobState -JobId $JobId -To 'IN_PROGRESS' -Reason 'Inicio de produccion' -By 'production' | Out-Null
 
     if (-not (Test-PwxServiceImplemented -ServiceId $serviceId)) {

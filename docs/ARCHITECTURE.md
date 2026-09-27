@@ -25,7 +25,8 @@ proyecto/
       id.ps1               # IDs secuenciales C-XXXX / J-XXXX / M-XXXX
       state.ps1            # maquina de estados + transiciones validas
       store.ps1            # CRUD de clientes y trabajos en disco
-      pricing.ps1          # precios deterministas desde el catalogo
+      pricing.ps1          # precios y cotizaciones deterministas desde el catalogo
+      payments.ps1         # solicitud de pago, comprobante y aprobación humana
       outbox.ps1           # cola de mensajes salientes (DRAFT->APPROVED->SENT)
       qa.ps1               # validacion determinista de salida (PASS/FAIL)
       delivery.ps1         # empaquetado + manifest.json + checksums.sha256
@@ -43,9 +44,13 @@ proyecto/
       data.ps1             # CSV RFC4180: limpieza + informe consistente
       construction.ps1     # computos de obra -> presupuesto.xlsx con totales
     bin/
-      pwx.ps1              # CLI (subcomandos de clientes, trabajos, servicios, outbox)
+      pwx.ps1              # CLI (subcomandos de clientes, trabajos, servicios, pagos y outbox)
+      web.ps1              # inicia el panel local de operador en 127.0.0.1
       demo.ps1             # demo completa del ciclo con Ollama real
       ollama-check.ps1     # diagnostico de Ollama y modelo
+    web/
+      server.ps1           # API local sin dependencias, restringida a loopback
+      public/              # interfaz HTML, CSS y JavaScript del panel
   tests/
     runner.ps1             # harness propio (Assert-*, workspaces aislados)
     run-tests.ps1          # entrada: unit + E2E
@@ -74,15 +79,19 @@ Transiciones definidas en `src/core/state.ps1` (`$PwxStateTransitions`). `Set-Pw
    - Si es invalida, se intenta reparar; si persiste, el trabajo pasa a `BLOCKED`.
    - El servicio elegido se valida contra el catalogo (sino, cae a `simulate-service`).
    - Los `required_output` se conforman al **contrato** del servicio (determinista), no a lo que "imagine" el modelo.
-4. `job:produce` -> agente de produccion:
-   - `READY_FOR_PRODUCTION -> IN_PROGRESS`.
+4. `payment:request` -> crea una cotización determinista después de requisitos completos. Elige método local configurado, guarda el importe y deja el pago en `REQUESTED`.
+5. `payment:proof` -> copia el comprobante permitido (`.png`, `.jpg`, `.jpeg` o `.pdf`) al workspace, calcula su SHA-256 y mueve el pago a `PROOF_SUBMITTED`.
+6. `payment:approve` / `payment:reject` -> una persona revisa el comprobante. Los servicios comerciales no inician producción hasta que su pago tenga estado `APPROVED`.
+7. `job:produce` -> agente de produccion:
+   - rechaza con `PAYMENT_REQUIRED` cuando el cobro previo es obligatorio y no está aprobado.
+   - `READY_FOR_PRODUCTION -> IN_PROGRESS` solo tras validar el pago.
    - Invoca la funcion determinista del servicio (`Invoke-PwxService_<id>`).
    - Si el servicio no esta implementado -> `BLOCKED` con `SERVICE_NOT_IMPLEMENTED` (hoy ninguno: los 6 estan activos).
    - Ejecuta QA determinista (`Invoke-PwxQa`): carpeta de salida, no vacia, patrones requeridos, archivos no vacios.
    - QA PASS -> `QA -> READY_FOR_DELIVERY`; QA FAIL -> `REWORK`.
-5. `job:deliver` -> copia `output/` a `delivery/` y escribe `delivery/manifest.json` (estandar) + `delivery/checksums.sha256` con sha256 por archivo (ver `docs/DELIVERY_FORMAT.md`). Rechaza sin QA PASS (o `-AllowFail` en pruebas).
-6. `job:approvedeliver` -> `READY_FOR_DELIVERY -> DELIVERED` (aprobacion humana).
-7. `outbox:new/approve/send` -> mensajes de notificacion con transiciones validadas; nunca se "envian" sin aprobacion.
+8. `job:deliver` -> copia `output/` a `delivery/` y escribe `delivery/manifest.json` (estandar) + `delivery/checksums.sha256` con sha256 por archivo (ver `docs/DELIVERY_FORMAT.md`). Rechaza sin QA PASS (o `-AllowFail` en pruebas).
+9. `job:approvedeliver` -> `READY_FOR_DELIVERY -> DELIVERED` (aprobacion humana).
+10. `outbox:new/approve/send` -> mensajes de notificacion con transiciones validadas; nunca se "envian" sin aprobacion.
 
 ## Errores de Ollama
 
@@ -107,8 +116,8 @@ Sin Pester ni dependencias. `tests/runner.ps1` provee `Run-PwxTest`, `Assert-Pwx
 
 ## Limitaciones conocidas
 
-- Los 6 servicios del catalogo estan implementados y cubiertos por tests; si uno se desactiva (`implemented: false`), el trabajo cae a BLOCKED con `SERVICE_NOT_IMPLEMENTED`.
-- No hay envio real por email/WhatsApp; el outbox persiste estados (DRAFT/APPROVED/SENT) sin transport.
-- No hay autorizacion por rol ni multiusuario; "aprobacion" es un campo de texto.
-- Sin pagos reales ni cobro.
-- El LLM local puede producir especificaciones imperfectas; siempre pasan por validacion y conformacion determinista.
+- Los 6 servicios del catálogo están implementados y cubiertos por tests; si uno se desactiva (`implemented: false`), el trabajo cae a BLOCKED con `SERVICE_NOT_IMPLEMENTED`.
+- El cobro es local y manual: no hay conexión automática con Nequi, bancos, QR dinámicos ni facturación electrónica. Un humano debe revisar cada comprobante.
+- No hay envío real por email/WhatsApp; el outbox persiste estados (DRAFT/APPROVED/SENT) sin transport.
+- No hay autorización por rol ni multiusuario; las aprobaciones aún son campos de texto auditables.
+- El LLM local puede producir especificaciones imperfectas; siempre pasan por validación y conformación determinista.
