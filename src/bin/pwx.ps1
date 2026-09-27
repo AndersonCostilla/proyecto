@@ -58,7 +58,8 @@ PANEL WEB LOCAL:
 BACKUP DEL STORE:
   backup:create     [-Label <etiqueta>]  (copia store/ a backups/<UTCSTAMP>[-label]/ con manifest + checksums)
   backup:list
-  backup:verify     -Path <bundleDir>    (verifica integridad; exit 1 si falla. sin restore en PR-2)
+  backup:verify     -Path <bundleDir>    (verifica integridad; exit 1 si falla)
+  backup:restore    -Path <bundleDir> [-Force]  (verifica y restaura el workspace actual; preserva <workspace>.pre-restore-<stamp>)
 
 SISTEMA:
   config:show
@@ -478,6 +479,23 @@ switch ($cmd) {
         Write-Host ("VERIFY FALLA  {0}" -f $path)
         foreach ($p in $result.problems) { Write-Host ("  - {0}" -f $p) }
         exit 1
+    }
+    'backup:restore' {
+        $path = Read-PwxFlag -FlagList $rest -Name '-Path'
+        $force = Test-PwxFlagPresent -FlagList $rest -Name '-Force'
+        if (-not $path) { throw 'Falta -Path' }
+        try {
+            $result = Restore-PwxBackup -Path $path -Force:$force
+            Write-Host ("RESTORE OK  workspace={0}  archivos={1}  bytes={2}  {3}" -f $result.workspace, $result.file_count, $result.total_bytes, $result.content_hash)
+            if ($result.pre_restore_path) {
+                Write-Host ("Store anterior preservado en: {0}" -f $result.pre_restore_path)
+            }
+            exit 0
+        }
+        catch {
+            Write-Host ("RESTORE FALLA  {0}" -f $_.Exception.Message)
+            exit 1
+        }
     }
     default {
         Show-PwxHelp

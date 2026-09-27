@@ -375,3 +375,159 @@ function Test-PwxBackupBundle {
         manifest = $manifest
     }
 }
+
+function Restore-PwxBackup {
+    # PR-3: restore verificable, no destructivo y lo mas atomico posible.
+    # Siempre al workspace actual (Get-PwxConfig.WorkspacePath == lo que usaria
+    # Get-PwxWorkspacePath, pero SIN el mkdir efecto secundario: la decision de
+    # existencia/vacio se toma aqui). Sin -TargetWorkspace en v1.
+    # Orden de guardas:
+    #   1) BACKUP_RESTORE_BUNDLE_DENTRO_DEL_STORE (antes de tocar nada)
+    #   2) Test-PwxBackupBundle debe pasar -> BACKUP_RESTORE_VERIFY_FAILED
+    #   3) workspace no vacio exige -Force -> BACKUP_RESTORE_FORCE_REQUIRED
+    #   4) staging en <workspace>.restore-tmp-<stamp> + hashes contra manifest
+    #   5) swap por rename: workspace -> <workspace>.pre-restore-<stamp> (si habia
+    #      datos; nunca se borra automaticamente) y tmp -> workspace
+    # Sin logging ni escrituras dentro del workspace: el restore deja
+    # exactamente los bytes respaldados.
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [switch]$Force
+    )
+    $sep = [System.IO.Path]::DirectorySeparatorChar
+    $sepStr = [string]$sep
+    $trim = [char[]]@($sep, [char]'/')
+
+    $bundle = Resolve-PwxFullPath -Path $Path
+    if ($bundle.Length -gt 1) { $bundle = $bundle.TrimEnd($trim) }
+    $target = [System.IO.Path]::GetFullPath([string](Get-PwxConfig).WorkspacePath)
+    if ($target.Length -gt 1) { $target = $target.TrimEnd($trim) }
+
+    # Guarda C: el bundle no puede vivir dentro del workspace (el swap por
+    # rename moveria el bundle en mitad del proceso y romperia las rutas).
+    if ($bundle -eq $target -or $bundle.StartsWith($target + $sepStr, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw ('BACKUP_RESTORE_BUNDLE_DENTRO_DEL_STORE: el bundle {0} esta dentro del workspace {1}. Use una raiz PWX_BACKUP_DIR fuera del store.' -f $bundle, $target)
+    }
+
+    # Guarda A: el bundle debe verificar OK antes de tocar nada.
+    $check = Test-PwxBackupBundle -Path $bundle
+    if (-not $check.ok) {
+        throw ('BACKUP_RESTORE_VERIFY_FAILED: bundle invalido, no se toco el workspace. Problemas: {0}' -f (@($check.problems) -join '; '))
+    }
+    $manifest = $check.manifest
+
+    # Guarda B: workspace con datos exige -Force.
+    $exists = Test-Path -LiteralPath $target
+    $isEmpty = $true
+    if ($exists) {
+        $items = @(Get-ChildItem -LiteralPath $target -Force -ErrorAction SilentlyContinue)
+        $isEmpty = ($items.Count -eq 0)
+    }
+    $needPre = ($exists -and (-not $isEmpty))
+    if ($needPre -and (-not $Force)) {
+        throw ('BACKUP_RESTORE_FORCE_REQUIRED: el workspace {0} no esta vacio; sin -Force no se toca nada. Con -Force el store actual se preserva en {0}.pre-restore-<UTCSTAMP>.' -f $target)
+    }
+
+    # Nombres de hermanos (mismo parent => mismo volumen) sin colision.
+    $stamp = ([DateTime]::UtcNow).ToString('yyyyMMdd-HHmmss')
+    $tmp = '{0}.restore-tmp-{1}' -f $target, $stamp
+    $pre = '{0}.pre-restore-{1}' -f $target, $stamp
+    $suffix = 2
+    while ((Test-Path -LiteralPath $tmp) -or ($needPre -and (Test-Path -LiteralPath $pre))) {
+        $tmp = '{0}.restore-tmp-{1}-{2}' -f $target, $stamp, $suffix
+        $pre = '{0}.pre-restore-{1}-{2}' -f $target, $stamp, $suffix
+        $suffix++
+    }
+
+    # Staging: copiar <bundle>/store/** al tmp re-validando contencion por ruta
+    # y re-verificando cada sha256 contra el manifest (barato y local).
+    New-PwxDirectory -Path $tmp | Out-Null
+    $files = @($manifest.files)
+    $copied = 0
+    foreach ($f in $files) {
+        $p = [string]$f.path
+        if (-not $p.StartsWith('store/', [System.StringComparison]::Ordinal) -or $p.Contains('\') -or $p.Contains('..') -or $p.Contains(':')) {
+            throw ('BACKUP_RESTORE_STAGING_FAILED: ruta insegura en manifest: {0} (tmp queda en {1}; store intacto)' -f $p, $tmp)
+        }
+        $srcFull = Join-Path $bundle $p.Replace([char]'/', $sep)
+        try {
+            Assert-PwxSafeWorkspacePath -WorkspacePath $bundle -Path $srcFull | Out-Null
+        }
+        catch {
+            throw ('BACKUP_RESTORE_STAGING_FAILED: origen fuera del bundle: {0} (tmp queda en {1}; store intacto)' -f $p, $tmp)
+        }
+        $destRel = $p.Substring('store/'.Length)
+        $dest = Join-Path $tmp $destRel.Replace([char]'/', $sep)
+        try {
+            Assert-PwxSafeWorkspacePath -WorkspacePath $tmp -Path $dest | Out-Null
+        }
+        catch {
+            throw ('BACKUP_RESTORE_STAGING_FAILED: destino fuera del tmp: {0} (tmp queda en {1}; store intacto)' -f $p, $tmp)
+        }
+        New-PwxDirectory -Path (Split-Path -Parent $dest) | Out-Null
+        Copy-Item -LiteralPath $srcFull -Destination $dest -Force
+        $got = Get-PwxSha256 -Path $dest
+        if ($got -ne [string]$f.sha256) {
+            throw ('BACKUP_RESTORE_STAGING_FAILED: hash distinto en tmp para {0} (esperado {1}, actual {2}; tmp queda en {3}; store intacto)' -f $p, [string]$f.sha256, $got, $tmp)
+        }
+        $copied++
+    }
+    if ($copied -ne $files.Count) {
+        throw ('BACKUP_RESTORE_STAGING_FAILED: se copiaron {0} de {1} archivos (tmp queda en {2}; store intacto)' -f $copied, $files.Count, $tmp)
+    }
+
+    # Swap. Recien aqui se mueve el workspace actual (nada antes del tmp completo).
+    $preRestore = $null
+    try {
+        if (Test-Path -LiteralPath $target) {
+            $itemsNow = @(Get-ChildItem -LiteralPath $target -Force -ErrorAction SilentlyContinue)
+            if ($itemsNow.Count -eq 0) {
+                Remove-Item -LiteralPath $target -Force
+            }
+            else {
+                if (-not $Force) {
+                    throw ('BACKUP_RESTORE_FORCE_REQUIRED: el workspace dejo de estar vacio durante el restore; se aborta antes del swap (tmp en {0})' -f $tmp)
+                }
+                Move-Item -LiteralPath $target -Destination $pre
+                $preRestore = $pre
+            }
+        }
+        Move-Item -LiteralPath $tmp -Destination $target
+    }
+    catch {
+        if ($_.Exception.Message -like 'BACKUP_RESTORE_FORCE_REQUIRED*') { throw }
+        $rolledBack = $false
+        if ($preRestore -and (-not (Test-Path -LiteralPath $target)) -and (Test-Path -LiteralPath $preRestore)) {
+            try {
+                Move-Item -LiteralPath $preRestore -Destination $target
+                $rolledBack = $true
+            }
+            catch {
+                $rolledBack = $false
+            }
+        }
+        $msg = 'BACKUP_RESTORE_SWAP_FAILED: no se pudo completar el swap: {0}' -f $_.Exception.Message
+        if ($rolledBack) {
+            $msg += ('. Rollback OK: el store original volvio a {0}; el contenido nuevo queda en {1} (renombrar a mano si hace falta)' -f $target, $tmp)
+        }
+        elseif ($preRestore) {
+            $msg += ('. Sin rollback automatico: estado previo en {0} y contenido listo en {1}; renombrar manualmente para recuperar' -f $preRestore, $tmp)
+        }
+        else {
+            $msg += ('. El store no llego a moverse; el contenido listo queda en {0} (renombrar a mano si hace falta)' -f $tmp)
+        }
+        throw $msg
+    }
+
+    # Deliberadamente sin Write-PwxLog: escribiria dentro del store restaurado.
+    return [ordered]@{
+        workspace        = $target
+        bundle           = $bundle
+        restored_at_utc  = Get-PwxUtcTimestamp
+        pre_restore_path = $preRestore
+        tmp_path         = $null
+        file_count       = [int]$manifest.file_count
+        total_bytes      = [long]$manifest.total_bytes
+        content_hash     = [string]$manifest.content_hash
+    }
+}
