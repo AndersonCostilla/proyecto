@@ -58,7 +58,20 @@ jobs:
           Write-Host ("Windows PowerShell {0} ({1})" -f $PSVersionTable.PSVersion, $PSVersionTable.OS)
           $exe = 'powershell'
           & $exe -NoProfile -ExecutionPolicy Bypass -File ./tests/run-tests.ps1 2>&1 3>&1 4>&1 6>&1 | Tee-Object -FilePath tests/_last-run.log
-          if ((Test-Path -LiteralPath variable:\LASTEXITCODE) -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $code = 0
+          if ((Test-Path -LiteralPath variable:\LASTEXITCODE) -and $LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
+          if ($code -ne 0) {
+            $lines = @(Get-Content -LiteralPath tests/_last-run.log -ErrorAction SilentlyContinue)
+            $bad = @($lines | Where-Object { $_ -match 'FAIL |RESULTADOS|ASSERT|Exception|ERROR' } | Select-Object -Last 15)
+            if (-not $bad) { $bad = @($lines | Select-Object -Last 15) }
+            foreach ($l in $bad) {
+              $m = ($l -replace '[^\x20-\x7E]', '?')
+              if ($m.Length -gt 300) { $m = $m.Substring(0, 300) }
+              Write-Host ("::error title=ps51-diag::{0}" -f $m)
+            }
+            Write-Host ("::error title=ps51-exit::exit={0} lineas_log={1}" -f $code, $lines.Count)
+          }
+          exit $code
 
       # Soak corto de estabilidad (5 iteraciones del pipeline completo).
       # Solo en la pierna linux/pwsh para mantener el CI rapido y gratis.
