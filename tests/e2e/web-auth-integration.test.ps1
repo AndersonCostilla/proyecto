@@ -33,12 +33,35 @@ function Start-PwxWebTestServer {
     return [pscustomobject]@{ Process = $proc; Out = $out; Err = $err; Port = $Port }
 }
 
+function Read-PwxWebTestLogFile {
+    # Lee un log con FileShare.ReadWrite: en Windows el proceso hijo de
+    # Start-Process mantiene el archivo de redireccion abierto (exclusivo)
+    # mientras vive; en Linux no hay bloqueo. Asi se puede leer en caliente.
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return '' }
+    $fs = $null
+    try {
+        $fs = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $sr = New-Object System.IO.StreamReader($fs, [System.Text.Encoding]::UTF8)
+        try {
+            return $sr.ReadToEnd()
+        }
+        finally {
+            $sr.Dispose()
+        }
+    }
+    catch {
+        return ''
+    }
+    finally {
+        if ($null -ne $fs) { $fs.Dispose() }
+    }
+}
+
 function Read-PwxWebTestServerLog {
     param([Parameter(Mandatory)]$Server)
-    $out = ''
-    $err = ''
-    if (Test-Path -LiteralPath $Server.Out) { $out = [System.IO.File]::ReadAllText($Server.Out) }
-    if (Test-Path -LiteralPath $Server.Err) { $err = [System.IO.File]::ReadAllText($Server.Err) }
+    $out = Read-PwxWebTestLogFile -Path $Server.Out
+    $err = Read-PwxWebTestLogFile -Path $Server.Err
     return ($out + "`n" + $err)
 }
 
