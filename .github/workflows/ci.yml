@@ -73,14 +73,16 @@ jobs:
           if ((Test-Path -LiteralPath variable:\LASTEXITCODE) -and $LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }
           if ($code -ne 0) {
             $lines = @(Get-Content -LiteralPath tests/_last-run.log -ErrorAction SilentlyContinue)
-            $bad = @($lines | Where-Object { $_ -match 'FAIL |RESULTADOS|ASSERT|Exception|ERROR' } | Select-Object -Last 15)
-            if (-not $bad) { $bad = @($lines | Select-Object -Last 15) }
+            $res = @($lines | Where-Object { $_ -match 'RESULTADOS' })
+            Write-Host ("::error title=ps51-exit::exit={0} lineas_log={1} {2}" -f $code, $lines.Count, ($res -join ' | '))
+            $tail = ($lines | Select-Object -Last 12) -join '%0A'
+            Write-Host ("::error title=ps51-tail::{0}" -f $tail)
+            $bad = @($lines | Where-Object { $_ -match 'FAIL ' } | Select-Object -Last 6)
             foreach ($l in $bad) {
               $m = ($l -replace '[^\x20-\x7E]', '?')
               if ($m.Length -gt 300) { $m = $m.Substring(0, 300) }
-              Write-Host ("::error title=ps51-diag::{0}" -f $m)
+              Write-Host ("::error title=ps51-fail::{0}" -f $m)
             }
-            Write-Host ("::error title=ps51-exit::exit={0} lineas_log={1}" -f $code, $lines.Count)
           }
           exit $code
 

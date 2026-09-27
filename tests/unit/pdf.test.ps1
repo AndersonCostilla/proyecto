@@ -1,4 +1,4 @@
-Run-PwxTest -Name 'pdf: estructura valida, xref con offsets reales y determinismo' -File 'unit' -Body {
+﻿Run-PwxTest -Name 'pdf: estructura valida, xref con offsets reales y determinismo' -File 'unit' -Body {
     $ws = New-PwxTestWorkspace
     $env:PWX_WORKSPACE = $ws
     Invoke-PwxBootstrap
