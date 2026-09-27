@@ -104,3 +104,21 @@ jobs:
           }
           $md = '### Suite fallida (' + '${{ matrix.label }}' + ')' + "`n" + $fence + "`n" + $body + "`n" + $fence + "`n"
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $md
+
+      # Las anotaciones de workflow SÍ son legibles via la API publica
+      # check-runs/annotations; aqui va el detalle de cada test fallido.
+      - name: Anotar fallos (check publico)
+        if: failure()
+        shell: pwsh
+        run: |
+          if (Test-Path -LiteralPath 'tests/_last-run.log') {
+            $fails = @(Select-String -Path 'tests/_last-run.log' -Pattern '^\s+- ' | Select-Object -First 20)
+            foreach ($f in $fails) {
+              $msg = $f.Line.Trim() -replace '[\r\n]+', ' | '
+              if ($msg) { Write-Host ('::error title=Fallo de test::' + $msg) }
+            }
+            if ($fails.Count -eq 0) { Write-Host '::error title=Fallo de suite::sin lineas FALLIDOS en tests/_last-run.log (fallo antes o durante la suite)' }
+          }
+          else {
+            Write-Host '::error title=Fallo de suite::no existe tests/_last-run.log'
+          }
