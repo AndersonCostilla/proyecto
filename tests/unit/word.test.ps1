@@ -1,4 +1,4 @@
-Run-PwxTest -Name 'word-service genera un docx válido desde contenido profesional' -File 'unit' -Body {
+﻿Run-PwxTest -Name 'word-service genera un docx válido desde contenido profesional' -File 'unit' -Body {
     $ws = New-PwxTestWorkspace
     $env:PWX_WORKSPACE = $ws
     Invoke-PwxBootstrap
