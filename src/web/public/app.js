@@ -3,10 +3,34 @@ const $ = (selector) => document.querySelector(selector);
 const money = (value, currency = 'COP') => new Intl.NumberFormat('es-CO', { style: 'currency', currency, maximumFractionDigits: 0 }).format(Number(value || 0));
 const escapeHtml = (text) => String(text ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;' }[char]));
 
+let authPromptActive = false;
 async function api(path, options = {}) {
-  const response = await fetch(path, { headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options });
+  const method = String(options.method || 'GET').toUpperCase();
+  const isLogin = path === '/api/login';
+  const isMutation = method !== 'GET' && method !== 'HEAD';
+  const headers = { 'Content-Type': 'application/json', ...(isMutation ? { 'X-Pwx-Panel': '1' } : {}), ...(options.headers || {}) };
+  const response = await fetch(path, { ...options, headers });
+  if (response.status === 401 && !isLogin && !authPromptActive) {
+    authPromptActive = true;
+    try {
+      const user = prompt('Sesion requerida. Usuario:');
+      if (user) {
+        const password = prompt('Contrasena:') || '';
+        const login = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Pwx-Panel': '1' },
+          body: JSON.stringify({ user, password })
+        });
+        if (login.ok) { location.reload(); throw new Error('Recargando la pagina'); }
+        toast('Credenciales invalidas', true);
+      }
+    } finally {
+      authPromptActive = false;
+    }
+    throw new Error('Sesion requerida');
+  }
   const body = await response.json().catch(() => ({ ok: false, message: 'Respuesta inválida del servidor' }));
-  if (!response.ok || body.ok === false) throw new Error(body.message || body.error || 'La operación no se pudo completar');
+  if (!response.ok || body.ok === false) throw new Error(body.message || (body.error && body.error.reason) || 'La operación no se pudo completar');
   return body;
 }
 function toast(message, error = false) { const node = $('#toast'); node.textContent = message; node.className = `toast show${error ? ' error' : ''}`; clearTimeout(toast.timer); toast.timer = setTimeout(() => node.className = 'toast', 3800); }

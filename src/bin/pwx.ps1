@@ -53,7 +53,7 @@ OUTBOX:
   outbox:export     [-Status DRAFT] [-Path <ruta>]  (exporta borradores DRAFT a workspace/exports; solo lectura, no envia)
 
 PANEL WEB LOCAL:
-  web:start         [-Port 8787]  (solo 127.0.0.1; no exponer a Internet)
+  web:start         [-Port 8787] [-Dev]  (solo 127.0.0.1; -Dev arranca sin auth y lo anuncia con X-Pwx-Auth: dev-mode)
   web:hash          [-Password <pw>]  (genera hash PBKDF2 para config/web.local.json; sin -Password lo pide interactivo)
 
 BACKUP DEL STORE:
@@ -437,7 +437,8 @@ switch ($cmd) {
         $portRaw = Read-PwxFlag -FlagList $rest -Name '-Port'
         $port = 8787
         if ($portRaw) { $port = [int]$portRaw }
-        Start-PwxWebServer -Port $port
+        $dev = Test-PwxFlagPresent -FlagList $rest -Name '-Dev'
+        Start-PwxWebServer -Port $port -DevMode:$dev
         exit 0
     }
     'web:hash' {

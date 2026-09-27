@@ -597,11 +597,124 @@ function Get-PwxWebDashboard {
     }
 }
 
+function Get-PwxWebSessionToken {
+    # Extrae el token pwx_session de la cabecera Cookie del request.
+    # Mismo criterio de parseo que Get-PwxWebAuthDecision (core/auth.ps1).
+    param([Parameter(Mandatory)][System.Net.HttpListenerRequest]$Request)
+    $cookie = [string]$Request.Headers['Cookie']
+    if ([string]::IsNullOrEmpty($cookie)) { return '' }
+    foreach ($pair in ($cookie -split ';')) {
+        $eq = $pair.IndexOf([char]'=')
+        if ($eq -lt 1) { continue }
+        $name = $pair.Substring(0, $eq).Trim()
+        if ($name -ieq 'pwx_session') {
+            $value = $pair.Substring($eq + 1).Trim()
+            if ($value.Length -ge 2 -and $value.StartsWith('"') -and $value.EndsWith('"')) {
+                $value = $value.Substring(1, $value.Length - 2)
+            }
+            return $value
+        }
+    }
+    return ''
+}
+
 function Invoke-PwxWebApi {
-    param([Parameter(Mandatory)][System.Net.HttpListenerContext]$Context, [Parameter(Mandatory)][string]$Path)
+    param(
+        [Parameter(Mandatory)][System.Net.HttpListenerContext]$Context,
+        [Parameter(Mandatory)][string]$Path,
+        $Config,
+        [switch]$DevMode
+    )
     $request = $Context.Request
     $method = $request.HttpMethod.ToUpperInvariant()
     try {
+        if ($method -eq 'POST' -and $Path -ceq '/api/login') {
+            $body = Get-PwxWebRequestJson -Request $request
+            $userName = Get-PwxWebString -Object $body -Property 'user'
+            $password = Get-PwxWebString -Object $body -Property 'password'
+            # TTL de sesion: auth.sessionTtlMinutes en la config (default 480).
+            $ttlMinutes = 480
+            if ($null -ne $Config -and $null -ne $Config.auth.sessionTtlMinutes) {
+                $ttlRaw = 0
+                if ([int]::TryParse([string]$Config.auth.sessionTtlMinutes, [ref]$ttlRaw) -and $ttlRaw -ge 1 -and $ttlRaw -le 10080) {
+                    $ttlMinutes = $ttlRaw
+                }
+            }
+            # Busqueda de usuario por id, case-insensitive (mejor UX al escribir).
+            $match = $null
+            if (-not [string]::IsNullOrWhiteSpace($userName) -and $null -ne $Config) {
+                foreach ($candidate in @($Config.auth.users)) {
+                    if ($null -ne $candidate -and ([string]$candidate.id -ieq $userName)) {
+                        $match = $candidate
+                        break
+                    }
+                }
+            }
+            $ok = $false
+            if ($null -ne $match) {
+                $ok = Test-PwxPasswordHash -Password $password -Hash ([string]$match.passwordHash)
+            }
+            if (-not $ok) {
+                # Delay fijo: frena fuerza bruta sin costo (local y gratuito).
+                # Mismo respuesta para usuario inexistente y password mala
+                # (no se enumera usuarios).
+                Start-Sleep -Milliseconds 300
+                Send-PwxWebJson -Context $Context -StatusCode 401 -Object ([ordered]@{
+                    ok    = $false
+                    error = [ordered]@{ reason = 'INVALID_CREDENTIALS'; code = 401 }
+                })
+                return
+            }
+            $session = New-PwxWebSession -UserId ([string]$match.id) -Role ([string]$match.role) -TtlMinutes ([double]$ttlMinutes)
+            $cookie = 'pwx_session={0}; HttpOnly; SameSite=Strict; Path=/; Max-Age={1}' -f $session.token, ([int]($ttlMinutes * 60))
+            $Context.Response.Headers['Set-Cookie'] = $cookie
+            Send-PwxWebJson -Context $Context -Object ([ordered]@{
+                ok   = $true
+                user = [ordered]@{
+                    id              = [string]$match.id
+                    role            = [string]$match.role
+                    expires_at_utc  = [string]$session.expires_at_utc
+                }
+            })
+            return
+        }
+        if ($method -eq 'GET' -and $Path -ceq '/api/session') {
+            if ($DevMode) {
+                Send-PwxWebJson -Context $Context -Object ([ordered]@{
+                    ok       = $true
+                    user     = [ordered]@{ id = 'dev'; role = 'admin'; expires_at_utc = $null }
+                    devMode  = $true
+                })
+                return
+            }
+            $token = Get-PwxWebSessionToken -Request $request
+            $session = if ($token) { Get-PwxWebSession -Token $token } else { $null }
+            if ($null -eq $session) {
+                # Defensa en profundidad: el middleware ya exige sesion antes.
+                Send-PwxWebJson -Context $Context -StatusCode 401 -Object ([ordered]@{
+                    ok    = $false
+                    error = [ordered]@{ reason = 'AUTH_REQUIRED'; code = 401 }
+                })
+                return
+            }
+            Send-PwxWebJson -Context $Context -Object ([ordered]@{
+                ok       = $true
+                user     = [ordered]@{
+                    id             = [string]$session.user_id
+                    role           = [string]$session.role
+                    expires_at_utc = [string]$session.expires_at_utc
+                }
+                devMode  = $false
+            })
+            return
+        }
+        if ($method -eq 'POST' -and $Path -ceq '/api/logout') {
+            $token = Get-PwxWebSessionToken -Request $request
+            if ($token) { Remove-PwxWebSession -Token $token | Out-Null }
+            $Context.Response.Headers['Set-Cookie'] = 'pwx_session=; Path=/; Max-Age=0'
+            Send-PwxWebJson -Context $Context -Object ([ordered]@{ ok = $true })
+            return
+        }
         if ($method -eq 'POST' -and $Path -eq '/api/word-wizard/analyze') {
             $body = Get-PwxWebRequestJson -Request $request
             $analysis = Invoke-PwxWebWordWizardAnalysis -Payload $body
@@ -741,12 +854,40 @@ function Invoke-PwxWebApi {
 function Start-PwxWebServer {
     param(
         [int]$Port = 8787,
-        [string]$BindAddress = '127.0.0.1'
+        [string]$BindAddress = '127.0.0.1',
+        [switch]$DevMode
     )
     if ($Port -lt 1024 -or $Port -gt 65535) { throw 'El puerto debe estar entre 1024 y 65535' }
     if ($BindAddress -notin @('127.0.0.1', 'localhost')) { throw 'Por seguridad, el servidor web solo permite 127.0.0.1 o localhost' }
     $publicRoot = Get-PwxWebPublicRoot
     if (-not (Test-Path -LiteralPath $publicRoot)) { throw "No existe la interfaz web: $publicRoot" }
+
+    # Gate de arranque (PR-5): se resuelve ANTES de escuchar.
+    #   - Sin -DevMode: exige config web valida y auth.enabled=true.
+    #   - Con -DevMode: arranca sin auth, pero es ruidoso (aviso + header).
+    $webConfig = Get-PwxWebAuthConfig
+    if ($DevMode) {
+        Write-Host 'AVISO: -DevMode activo: el panel arranca SIN autenticacion (todas las respuestas llevan X-Pwx-Auth: dev-mode).' -ForegroundColor Yellow
+    }
+    else {
+        $validation = $null
+        if ($null -ne $webConfig) {
+            $validation = Test-PwxWebAuthConfigValid -Config $webConfig
+        }
+        if ($null -eq $webConfig -or -not $validation.ok) {
+            $detail = if ($null -eq $webConfig) {
+                'no existe config/web.local.json'
+            }
+            else {
+                (@($validation.problems) -join '; ')
+            }
+            throw ('AUTH_NOT_CONFIGURED: {0}. Pasos: 1) Copy-Item config\web.example.json config\web.local.json; 2) pwsh -File src\bin\pwx.ps1 web:hash -Password <pw> y pega el hash en passwordHash de cada usuario; 3) pon auth.enabled=true; 4) reinicia el panel. Para desarrollo sin auth usa: web:start -Dev.' -f $detail)
+        }
+        if ($webConfig.auth.enabled -ne $true) {
+            throw 'AUTH_NOT_ENABLED: config/web.local.json tiene auth.enabled=false. Ponlo en true para exigir login, o arranca en desarrollo con: web:start -Dev.'
+        }
+    }
+
     $prefix = "http://${BindAddress}:$Port/"
     $listener = New-Object System.Net.HttpListener
     $listener.Prefixes.Add($prefix)
@@ -764,8 +905,34 @@ function Start-PwxWebServer {
         while ($listener.IsListening) {
             $context = $listener.GetContext()
             $path = [System.Uri]::UnescapeDataString($context.Request.Url.AbsolutePath)
+            $method = $context.Request.HttpMethod.ToUpperInvariant()
+
+            # Header informativo del modo de auth (util para depurar).
+            if ($DevMode) {
+                $context.Response.Headers['X-Pwx-Auth'] = 'dev-mode'
+            }
+            else {
+                $context.Response.Headers['X-Pwx-Auth'] = 'session'
+            }
+
+            # Middleware de auth (PR-5): decision pura de core/auth.ps1,
+            # aplicada a /api/* y a toda la interfaz antes de enrutar.
+            $headers = @{}
+            foreach ($key in $context.Request.Headers.AllKeys) {
+                if ($null -ne $key) { $headers[$key] = [string]$context.Request.Headers[$key] }
+            }
+            $decision = Get-PwxWebAuthDecision -Path $path -Method $method -Headers $headers -Config $webConfig -DevMode:$DevMode
+            if (-not $decision.allowed) {
+                $denyCode = [int]$decision.code
+                Send-PwxWebJson -Context $context -StatusCode $denyCode -Object ([ordered]@{
+                    ok    = $false
+                    error = [ordered]@{ reason = [string]$decision.reason; code = $denyCode }
+                })
+                continue
+            }
+
             if ($path.StartsWith('/api/')) {
-                Invoke-PwxWebApi -Context $context -Path $path
+                Invoke-PwxWebApi -Context $context -Path $path -Config $webConfig -DevMode:$DevMode
                 continue
             }
             if ($context.Request.HttpMethod.ToUpperInvariant() -ne 'GET') {

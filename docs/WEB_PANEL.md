@@ -71,9 +71,16 @@ No lo expongas a Internet ni lo publiques mediante port forwarding. Para convert
 - Almacenamiento multiusuario y copias de seguridad.
 - Revisión de seguridad antes del despliegue.
 
-## Autenticación del panel (núcleo PR‑4)
+## Autenticación del panel (PR‑5)
 
-El núcleo de autenticación ya existe en el código (`src/core/auth.ps1`): hashing de contraseñas con PBKDF2, validación de configuración, sesiones en memoria y la función de decisión que el middleware consumirá. **La integración real al panel (endpoint de login, cookies de sesión y control de roles por ruta) llega en PR‑5**; mientras tanto, abrir el panel no cambia en nada y esta sección solo describe cómo preparar la configuración.
+El panel integra el núcleo de autenticación de PR‑4 (`src/core/auth.ps1`). Por defecto **no arranca sin configuración válida** (deny-start), admite un modo de desarrollo explícito con `-Dev`, y aplica en vivo el middleware de sesión, CSRF y roles en todas las rutas. El bind sigue siendo solo loopback (`127.0.0.1`); nada de esto lo expone a Internet.
+
+### Deny-start: el panel exige config
+
+`web:start` (y `src\bin\web.ps1`) validan la config **antes de escuchar**:
+
+- Sin `config/web.local.json`, o con errores de schema, o con `auth.enabled` distinto de `true` → el proceso sale con `AUTH_NOT_CONFIGURED` (mensaje accionable) o `AUTH_NOT_ENABLED` y el panel no se abre.
+- Con `-Dev` el gate se salta, pero el modo queda a la vista: aviso en consola (`AVISO: -DevMode activo...`) y header `X-Pwx-Auth: dev-mode` en **todas** las respuestas. Sin `-Dev`, las respuestas llevan `X-Pwx-Auth: session`.
 
 ### Archivo `config/web.local.json`
 
@@ -89,7 +96,8 @@ El archivo está ignorado por Git. Su schema v1 es:
 {
   "schema_version": "1",
   "auth": {
-    "enabled": false,
+    "enabled": true,
+    "sessionTtlMinutes": 480,
     "users": [
       { "id": "admin",   "role": "admin",    "passwordHash": "REEMPLAZAR" },
       { "id": "operador", "role": "operator", "passwordHash": "REEMPLAZAR" }
@@ -101,11 +109,10 @@ El archivo está ignorado por Git. Su schema v1 es:
 Reglas que valida el núcleo (`Test-PwxWebAuthConfigValid`, sin lanzar excepciones):
 
 - `schema_version` debe ser exactamente `"1"` (texto).
-- `auth.enabled` debe ser booleano.
+- `auth.enabled` debe ser booleano; para arrancar sin `-Dev` debe ser `true`.
 - Con `enabled: true`: `users` no puede estar vacío; cada usuario necesita `id` no vacío y único, `role` igual a `operator` o `admin`, y `passwordHash` con formato `pbkdf2-sha256$<iters>$<salt>$<hash>` (o `pbkdf2-sha1$...` como compatibilidad en runtimes sin SHA256).
-- Con `enabled: false` solo se exigen `schema_version` y `enabled` (el panel queda abierto, sin login).
-
-Si el archivo no existe, `Get-PwxWebAuthConfig` devuelve `$null`. La ruta puede sobrescribirse con la variable de entorno `PWX_WEB_CONFIG_FILE` (útil para pruebas).
+- `auth.sessionTtlMinutes` es opcional: TTL de la sesión en minutos (default `480`).
+- Si el archivo no existe, `Get-PwxWebAuthConfig` devuelve `$null`. La ruta puede sobrescribirse con la variable de entorno `PWX_WEB_CONFIG_FILE` (útil para pruebas).
 
 ### Generar hashes: `web:hash`
 
@@ -124,9 +131,28 @@ Precauciones:
 - Pasar `-Password` en la línea de comandos deja la contraseña en el **historial del shell** y en la lista de procesos del sistema; para uso diario prefiere el modo interactivo.
 - El hash no se puede revertir (PBKDF2 con 120000 iteraciones, salt aleatorio de 16 bytes), pero no sustituye un archivo local protegido: `config/web.local.json` es privado como `payment-methods.local.json`.
 
-### Qué decidirá el middleware (contrato PR‑5)
+### Arrancar: normal y `-Dev`
 
-`Get-PwxWebAuthDecision -Path -Method -Headers -Config -DevMode` responde `{ allowed, code, userId, role, reason }` con estas reglas:
+```powershell
+# Con auth obligatoria (requiere config web.local.json valida y enabled=true)
+pwsh -File src/bin/pwx.ps1 web:start
+pwsh -File src/bin/web.ps1
+
+# Desarrollo sin auth (explicito, ruidoso y auditable: aviso + X-Pwx-Auth: dev-mode)
+pwsh -File src/bin/pwx.ps1 web:start -Dev
+pwsh -File src/bin/web.ps1 -Dev
+```
+
+### Sesiones, cookie y endpoints
+
+- `POST /api/login` con `{"user": "...", "password": "..."}` (ruta pública): busca el usuario por `id` sin distinguir mayúsculas, valida el hash y responde `200` con `{"ok": true, "user": {...}}` más la cookie `pwx_session=<token>; HttpOnly; SameSite=Strict; Path=/; Max-Age=<segundos>`. Credencial mala → `401` genérico `INVALID_CREDENTIALS` (no revela si el usuario existe; aplica un delay fijo de 300 ms).
+- `GET /api/session` (con sesión): quién es `{ok, user: {id, role, expires_at_utc}, devMode}`. En `-Dev` responde `200` con `devMode: true` sin cookie.
+- `POST /api/logout` (con sesión **y** header `X-Pwx-Panel: 1`): elimina la sesión y devuelve la cookie `pwx_session=; Path=/; Max-Age=0` para borrarla en el navegador.
+- Las sesiones viven solo en memoria (token aleatorio de 32 bytes): al reiniciar el servidor desaparecen y hay que volver a loguearse.
+
+### Qué decide el middleware (en vivo desde PR‑5)
+
+Toda llamada a `/api/*` (menos `/api/login`) y toda la interfaz (menos `GET /`, `GET /app.js`, `GET /styles.css`) pasa por `Get-PwxWebAuthDecision` **antes** de enrutar:
 
 | Situación | allowed | code | reason |
 |---|---|---|---|
@@ -135,10 +161,15 @@ Precauciones:
 | Mutación (`POST`/`PUT`/`PATCH`/`DELETE`) sin header `X-Pwx-Panel: 1` | no | 403 | `CSRF_HEADER_MISSING` |
 | `/api/admin/*` con rol `operator` | no | 403 | `FORBIDDEN_ROLE` |
 | Con sesión válida (y header CSRF si es mutación) | sí | 200 | `SESSION_OK` |
-| `auth.enabled: false` en la config | sí | 200 | `AUTH_DISABLED` |
-| Ejecución con `-DevMode` | sí | 200 | `DEV_MODE` |
+| Ejecución con `-Dev` | sí | 200 | `DEV_MODE` |
 
-Las sesiones viven solo en memoria: se crean con `New-PwxWebSession` (TTL en minutos), se limpian con `Invoke-PwxWebSessionSweep` y desaparecen al reiniciar el servidor. Ninguna ruta del panel usa todavía esta decisión; eso se conecta en PR‑5 (deny-start sin config, `-Dev`, `/api/login`, cookies y roles).
+Cuando no está permitido, la respuesta es JSON determinista:
+
+```json
+{ "ok": false, "error": { "reason": "AUTH_REQUIRED", "code": 401 } }
+```
+
+El front (`app.js`) añade `X-Pwx-Panel: 1` en cada mutación y, ante un `401`, ofrece un login mínimo con `prompt()` contra `/api/login` y recarga la página para continuar con la sesión nueva.
 
 ## Configuración de pagos
 
