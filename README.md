@@ -150,7 +150,7 @@ Consulta [docs/PAYMENTS.md](docs/PAYMENTS.md) y [docs/PRICING.md](docs/PRICING.m
 
 ## Backups del store
 
-PWX soporta backups verificables (100% locales y gratuitos): create/list/verify.
+PWX soporta backups verificables (100% locales y gratuitos): create/list/verify/restore.
 
 - Guía: [`docs/BACKUP.md`](docs/BACKUP.md)
 
@@ -160,6 +160,7 @@ Ejemplos:
 pwsh -File src/bin/pwx.ps1 backup:create -Label diario
 pwsh -File src/bin/pwx.ps1 backup:list
 pwsh -File src/bin/pwx.ps1 backup:verify -Path backups/<bundle>/
+pwsh -File src/bin/pwx.ps1 backup:restore -Path backups/<bundle>/   # [-Force] si el store tiene datos
 ```
 
 Config:
@@ -170,14 +171,17 @@ Config:
 
 Mensajes salientes con aprobación humana obligatoria (`DRAFT → APPROVED → SENT`) y transporte real **100% gratuito y local** desde PR-6:
 
-- `file` → escribe un correo `.eml` estándar en `workspace/exports/eml/` (abierto con cualquier cliente de correo, adjuntos verificados con SHA-256).
+- `mark-only` → **transporte por defecto**: solo cambia el estado (comportamiento histórico, no genera archivos).
+- `file` → **transporte local recomendado para envío/exportación real sin red**: escribe un correo `.eml` estándar en `workspace/exports/eml/` (abierto con cualquier cliente de correo, adjuntos verificados con SHA-256).
 - `mock` → simula el envío (tests/desarrollo).
-- `mark-only` → solo cambia el estado (comportamiento histórico).
-- `smtp` → reservado para PR-7; hoy se rechaza con error claro (PWX funciona sin él).
+- `smtp` → reservado para después de v1.0; hoy se rechaza con error claro (PWX funciona sin él).
+
+El transporte se elige con `-Transport`, con la variable `PWX_TRANSPORT` o en `settings.json` (`outbox.transport`).
 
 Reglas: un `DRAFT` jamás se envía, un `SENT` no se reenvía sin `-Force`, y ningún transporte abre conexiones de red.
 
 ```powershell
+pwsh -File src/bin/pwx.ps1 outbox:new -Recipient cliente@correo.com -Subject "Entrega lista" -Body "Adjunto el resultado." -Attachments <ruta-dentro-del-store>
 pwsh -File src/bin/pwx.ps1 outbox:approve -Id M-0001 -By anderson
 pwsh -File src/bin/pwx.ps1 outbox:send -Id M-0001 -Transport file
 ```
@@ -242,17 +246,20 @@ job:new / job:show / job:list / job:requisitos / job:input / job:produce / job:q
 job:deliver / job:approvedeliver / job:state / job:note
 services:list / price:calc / quote:calc
 payment:methods / payment:request / payment:show / payment:proof / payment:approve / payment:reject
-web:start
+web:start / web:hash
 lead:new / lead:import / lead:import-socrata / lead:list / lead:dedupe / lead:score / lead:draft / lead:convert
 outbox:new / outbox:show / outbox:list / outbox:approve / outbox:send / outbox:export
+backup:create / backup:list / backup:verify / backup:restore
 config:show / ollama:check
 ```
 
 ## Configuración y seguridad
 
-- `config/settings.json`: modelo, URL de Ollama, timeouts, workspace y moneda.
+- `config/settings.json`: modelo, URL de Ollama, timeouts, workspace, moneda y transporte por defecto del outbox.
 - `config/services.json`: catálogo de servicios, precios y reglas de cotización.
 - `config/payment-methods.example.json`: plantilla de métodos de pago; copia local privada requerida para cobrar.
+- `config/web.example.json`: plantilla del panel web (usuarios, roles, `passwordHash`); la copia local privada `config/web.local.json` activa la autenticación (`web:hash` genera los hashes).
+- `config/smtp.example.json`: formato previsto de SMTP; **reservado para después de v1.0** (PWX funciona sin él con `file`/`mock`/`mark-only`).
 - `store/`: datos locales de clientes, trabajos, pagos, comprobantes, salidas, QA, entregas y logs.
 - Variables de entorno disponibles: `PWX_ROOT`, `PWX_WORKSPACE`, `PWX_MODEL`, `PWX_OLLAMA_URL`, `PWX_OLLAMA_CONNECT_TIMEOUT`, `PWX_OLLAMA_REQUEST_TIMEOUT`, `PWX_PAYMENT_METHODS_FILE`, `PWX_TRANSPORT` (transporte por defecto del outbox: `file|mock|mark-only`).
 

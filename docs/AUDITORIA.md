@@ -1,5 +1,11 @@
 # Auditoría PWX — 2026-09-27
 
+> ⚠️ **AUDITORÍA HISTÓRICA / SUPERSEDED** — Este documento refleja el estado del
+> 2026-09-27 (commit `7846e08`, 109/109 tests) y **no el estado actual**. Los cuatro
+> huecos que identificó están cerrados: CI (PR-1), Backup/Restore (PR-2/PR-3),
+> Autenticación del panel (PR-4/PR-5) y transporte del outbox (PR-6, `file`).
+> El estado vigente de v1.0 está en [docs/RELEASE_V1.md](RELEASE_V1.md).
+
 > Estado del repositorio: commit `7846e08` (merge de las dos líneas de trabajo) ·
 > **109/109 tests en verde** · 28 commits · sin nada pendiente de subir.
 

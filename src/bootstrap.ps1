@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-function Get-PwxVersion { return '0.1.0' }
+function Get-PwxVersion { return '1.0.0' }
 
 if ($env:PWX_ROOT) {
     $global:PwxRoot = $env:PWX_ROOT

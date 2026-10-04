@@ -63,13 +63,14 @@ Selecciona un archivo `.md` o `.txt` UTF-8 de máximo 1 MB, espera el resultado 
 
 El servidor está restringido a `127.0.0.1`/`localhost`. Esto significa que solo se puede abrir desde el mismo computador donde ejecutas PowerShell.
 
-No lo expongas a Internet ni lo publiques mediante port forwarding. Para convertirlo en un portal de clientes público faltan, como mínimo:
+No lo expongas a Internet ni lo publiques mediante port forwarding. El panel de operador ya incluye autenticación con sesiones, CSRF y roles (`admin`/`operator`, ver la sección "Autenticación del panel"). Para convertirlo en un portal de clientes público faltan, como mínimo:
 
-- Registro, inicio de sesión y recuperación de cuenta.
-- Roles y autorización por cliente, agente, revisor y administrador.
-- HTTPS, sesiones seguras, límite de intentos y auditoría.
-- Almacenamiento multiusuario y copias de seguridad.
-- Revisión de seguridad antes del despliegue.
+- Cuentas de cliente: registro, inicio de sesión propio y recuperación (hoy los usuarios son operadores sembrados a mano en `config/web.local.json`).
+- Roles y autorización por cliente, agente y revisor (más allá de los roles de operador existentes).
+- HTTPS y exposición segura más allá de loopback.
+- Límite de intentos de login y hardening adicional (la auditoría por eventos ya existe).
+- Almacenamiento multiusuario real.
+- Revisión de seguridad profesional antes del despliegue.
 
 ## Autenticación del panel (PR‑5)
 
