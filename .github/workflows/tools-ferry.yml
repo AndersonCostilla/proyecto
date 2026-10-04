@@ -30,12 +30,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Descargar PowerShell 7.4.6 (linux-x64) y checksum
+      - name: Descargar PowerShell 7.6.6 (linux-x64) y checksum
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP"
           curl -fsSL -o pwsh-linux-x64.tar.gz \
-            'https://github.com/PowerShell/PowerShell/releases/download/v7.4.6/powershell-7.4.6-linux-x64.tar.gz'
+            'https://github.com/PowerShell/PowerShell/releases/download/v7.6.6/powershell-7.6.6-linux-x64.tar.gz'
           sha256sum pwsh-linux-x64.tar.gz > pwsh-linux-x64.tar.gz.sha256
           ls -la pwsh-linux-x64.tar.gz*
 
@@ -52,7 +52,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           cp ../pwsh-linux-x64.tar.gz ../pwsh-linux-x64.tar.gz.sha256 .
           git add pwsh-linux-x64.tar.gz pwsh-linux-x64.tar.gz.sha256
-          git commit -qm 'tools: pwsh 7.4.6 linux-x64 (recuperacion de entorno, temporal)'
+          git commit -qm 'tools: pwsh 7.6.6 linux-x64 (recuperacion de entorno, temporal)'
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push -q origin HEAD:refs/heads/tools/ferry --force
           echo 'Publicado en refs/heads/tools/ferry'
