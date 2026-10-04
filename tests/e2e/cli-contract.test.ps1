@@ -6,7 +6,22 @@ $script:PwxCliContractCli = Join-Path (Join-Path $global:PwxRepoRoot 'src') 'bin
 
 function Invoke-PwxCliContractCli {
     param([string[]]$CliArgs)
-    $raw = @(& (Get-PwxShellExe) -NoProfile -ExecutionPolicy Bypass -File $script:PwxCliContractCli @CliArgs 2>&1)
+    # Windows PowerShell 5.1 con $ErrorActionPreference='Stop' (runner): el stderr
+    # del proceso hijo redirigido con 2>&1 llega como ErrorRecord TERMINANTE antes
+    # de poder consultar $LASTEXITCODE (fallo real de CI en windows-ps51: el throw
+    # 'Falta -Path' de backup:restore mataba el test padre). El CLI imprime los
+    # fallos esperados por stdout (patron 'SEND FALLA' + exit 1), pero los throws
+    # no capturados salen por stderr. Se relaja EAP solo durante la invocacion y
+    # se restaura SIEMPRE (finally sin catch: un fallo real de la invocacion
+    # sigue propagandose). Exit code y texto se comprueban igual que antes.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $raw = @(& (Get-PwxShellExe) -NoProfile -ExecutionPolicy Bypass -File $script:PwxCliContractCli @CliArgs 2>&1)
+    }
+    finally {
+        $ErrorActionPreference = $prevEap
+    }
     return @{
         exit = [int]$LASTEXITCODE
         out  = (($raw -join "`n") -replace "`r", '')
