@@ -345,10 +345,18 @@ switch ($cmd) {
     }
     'outbox:send' {
         $id = Read-PwxFlag -FlagList $rest -Name '-Id'
+        $transport = Read-PwxFlag -FlagList $rest -Name '-Transport'
+        $force = Test-PwxFlagPresent -FlagList $rest -Name '-Force'
         if (-not $id) { throw 'Falta -Id' }
-        $item = Set-PwxOutboxStatus -Id $id -Status 'SENT'
-        $item | ConvertTo-Json -Depth 6
-        exit 0
+        try {
+            $result = Send-PwxOutboxMessage -Id $id -Transport $transport -Force:$force
+            $result | ConvertTo-Json -Depth 6
+            exit 0
+        }
+        catch {
+            Write-Host ("SEND FALLA  {0}: {1}" -f $id, $_.Exception.Message)
+            exit 1
+        }
     }
     'outbox:export' {
         $status = Read-PwxFlag -FlagList $rest -Name '-Status'

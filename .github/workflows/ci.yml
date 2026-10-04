@@ -45,7 +45,7 @@ jobs:
       # deshace el 'stop' que GitHub prepende: en Windows PowerShell 5.1 el
       # stderr nativo del hijo elevaria ErrorRecords terminantes y abortaria el
       # paso a mitad de suite; el exit real lo gobierna $LASTEXITCODE.
-      - name: Suite completa (109 tests, pwsh)
+      - name: Suite completa (pwsh)
         if: matrix.shell == 'pwsh'
         shell: pwsh
         run: |
@@ -55,7 +55,7 @@ jobs:
           & $exe -NoProfile -ExecutionPolicy Bypass -File ./tests/run-tests.ps1 2>&1 3>&1 4>&1 6>&1 | Tee-Object -FilePath tests/_last-run.log
           if ((Test-Path -LiteralPath variable:\LASTEXITCODE) -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Suite completa (109 tests, Windows PowerShell 5.1)
+      - name: Suite completa (Windows PowerShell 5.1)
         if: matrix.shell == 'powershell'
         shell: powershell
         run: |

@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "note": "RESERVADO para PR-7. Hoy PWX funciona 100% gratuito y offline con los transportes file (correo .eml local en workspace/exports/eml), mock (simulacion) y mark-only. Este archivo documenta el formato previsto para cuando smtp se implemente; mientras tanto Send-PwxOutboxMessage rechaza el transporte smtp con TRANSPORT_SMTP_NOT_IMPLEMENTED. Copia privada: config/smtp.local.json (gitignored).",
+  "host": "smtp.example.com",
+  "port": 587,
+  "tls": "starttls",
+  "username": "REEMPLAZAR",
+  "password_env": "PWX_SMTP_PASSWORD",
+  "from": "tu-correo@tu-dominio.com"
+}
