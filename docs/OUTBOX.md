@@ -55,7 +55,10 @@ Invariantes (también válidos con `-Force`):
 | `mark-only`  | Solo transiciona `APPROVED -> SENT` (comportamiento histórico)  | No  | No       |
 | `smtp`       | **Reservado PR-7**: hoy lanza `TRANSPORT_SMTP_NOT_IMPLEMENTED`  | —   | —        |
 
-### `file`: correo `.eml` 100% local (transporte gratuito por defecto recomendado)
+### `file`: correo `.eml` 100% local (transporte local recomendado de v1.0)
+
+El **default** es `mark-only` (compatibilidad con instalaciones existentes);
+`file` es el transporte recomendado de v1.0 para envío/exportación real sin red.
 
 Genera un archivo de correo estándar (RFC 5322 + MIME) por mensaje:
 
@@ -110,13 +113,23 @@ outbox:send     -Id <msg-id> [-Transport file|mock|mark-only|smtp] [-Force]
 outbox:export   [-Path <ruta>]   (exporta DRAFT a CSV; solo lectura, no envía)
 ```
 
-Ejemplo completo con transporte `file`:
+### Adjuntos (`-Attachments`)
+
+- Una o varias rutas **separadas por coma** (patrón CLI de listas).
+- Cada ruta debe **existir** y ser un archivo (directorios rechazados).
+- Cada ruta debe quedar **dentro del workspace** (`Assert-PwxSafeWorkspacePath`:
+  rutas externas o con `..` se rechazan con `Path traversal bloqueado`).
+- Al crear el mensaje se registra cada adjunto con su `sha256` y tamaño; al
+  enviar con `file` se re-verifica el hash (si el archivo cambió, `send.fail`).
+- Sin el flag: comportamiento anterior (mensaje sin adjuntos).
+
+Ejemplo completo con transporte `file` y adjuntos:
 
 ```bash
-pwsh -File src/bin/pwx.ps1 outbox:new -Recipient cliente@correo.com -Subject "Entrega lista" -Body "Su archivo esta listo."
+pwsh -File src/bin/pwx.ps1 outbox:new -Recipient cliente@correo.com -Subject "Entrega lista" -Body "Su archivo esta listo." -Attachments store/clients/C-0001/jobs/J-0001/delivery/resultado.xlsx
 pwsh -File src/bin/pwx.ps1 outbox:approve -Id M-0001 -By anderson
 pwsh -File src/bin/pwx.ps1 outbox:send -Id M-0001 -Transport file
-# -> escribe store/exports/eml/M-0001.eml y marca M-0001 como SENT
+# -> escribe store/exports/eml/M-0001.eml (con el adjunto MIME + sha256) y marca M-0001 como SENT
 ```
 
 Reenvío explícito de un mensaje ya enviado:
