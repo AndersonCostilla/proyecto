@@ -34,6 +34,12 @@ function New-PwxOutboxItem {
         approved_by  = $null
         approved_at  = $null
         sent_at      = $null
+        # Campos de transporte (PR-6): identificador estable del mensaje y
+        # trazabilidad de intentos de envio (ver src/core/transport.ps1).
+        message_id      = ('<{0}@pwx.local>' -f $id)
+        attempts        = 0
+        last_error      = $null
+        last_attempt_at = $null
     }
     foreach ($h in $Attachments) {
         if (Test-Path -LiteralPath $h) {

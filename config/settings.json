@@ -11,5 +11,8 @@
   "serviceCatalogFile": "config/services.json",
   "payments": {
     "requireApprovalBeforeProduction": true
+  },
+  "outbox": {
+    "transport": "mark-only"
   }
 }

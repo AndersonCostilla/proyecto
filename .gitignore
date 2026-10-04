@@ -27,3 +27,6 @@ config/payment-methods.local.json
 
 # Configuración privada del panel local
 config/web.local.json
+
+# Configuracion privada de SMTP (PR-7, reservado)
+config/smtp.local.json

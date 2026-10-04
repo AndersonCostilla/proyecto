@@ -28,6 +28,7 @@ proyecto/
       pricing.ps1          # precios y cotizaciones deterministas desde el catalogo
       payments.ps1         # solicitud de pago, comprobante y aprobación humana
       outbox.ps1           # cola de mensajes salientes (DRAFT->APPROVED->SENT)
+      transport.ps1        # envio del outbox (PR-6): file (.eml local) / mock / mark-only; smtp reservado PR-7
       qa.ps1               # validacion determinista de salida (PASS/FAIL)
       delivery.ps1         # empaquetado + manifest.json + checksums.sha256
       backup.ps1           # backups verificables del store (create/list/verify/restore)
@@ -92,7 +93,7 @@ Transiciones definidas en `src/core/state.ps1` (`$PwxStateTransitions`). `Set-Pw
    - QA PASS -> `QA -> READY_FOR_DELIVERY`; QA FAIL -> `REWORK`.
 8. `job:deliver` -> copia `output/` a `delivery/` y escribe `delivery/manifest.json` (estandar) + `delivery/checksums.sha256` con sha256 por archivo (ver `docs/DELIVERY_FORMAT.md`). Rechaza sin QA PASS (o `-AllowFail` en pruebas).
 9. `job:approvedeliver` -> `READY_FOR_DELIVERY -> DELIVERED` (aprobacion humana).
-10. `outbox:new/approve/send` -> mensajes de notificacion con transiciones validadas; nunca se "envian" sin aprobacion.
+10. `outbox:new/approve/send` -> mensajes de notificacion con transiciones validadas; nunca se "envian" sin aprobacion. Desde PR-6, `outbox:send` usa `Send-PwxOutboxMessage` con transporte explicito (`file` escribe un correo `.eml` 100% local en `workspace/exports/eml/`, `mock` simula, `mark-only` es el comportamiento historico; `smtp` reservado PR-7). Ver `docs/OUTBOX.md`.
 
 ## Errores de Ollama
 
@@ -119,6 +120,6 @@ Sin Pester ni dependencias. `tests/runner.ps1` provee `Run-PwxTest`, `Assert-Pwx
 
 - Los 6 servicios del catálogo están implementados y cubiertos por tests; si uno se desactiva (`implemented: false`), el trabajo cae a BLOCKED con `SERVICE_NOT_IMPLEMENTED`.
 - El cobro es local y manual: no hay conexión automática con Nequi, bancos, QR dinámicos ni facturación electrónica. Un humano debe revisar cada comprobante.
-- No hay envío real por email/WhatsApp; el outbox persiste estados (DRAFT/APPROVED/SENT) sin transport.
+- No hay envío real por SMTP/WhatsApp: el transporte `file` (PR-6) escribe el correo `.eml` listo en `workspace/exports/eml/` para que un humano lo envíe desde su propio correo; SMTP opcional queda reservado para PR-7 y PWX funciona sin él.
 - No hay autorización por rol ni multiusuario; las aprobaciones aún son campos de texto auditables.
 - El LLM local puede producir especificaciones imperfectas; siempre pasan por validación y conformación determinista.

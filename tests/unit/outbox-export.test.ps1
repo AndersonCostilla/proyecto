@@ -1,4 +1,4 @@
-﻿Run-PwxTest -Name 'export CSV valido con email y whatsapp' -File 'unit' -Body {
+Run-PwxTest -Name 'export CSV valido con email y whatsapp' -File 'unit' -Body {
     $ws = New-PwxTestWorkspace
     $env:PWX_WORKSPACE = $ws
     Invoke-PwxBootstrap
@@ -128,4 +128,42 @@ Run-PwxTest -Name 'export no sobrescribe archivos existentes y rechaza rutas ins
     Assert-PwxThrows { Export-PwxOutboxCsv -Path '..\..\secret\evil.csv' } 'Traversal profundo rechazado'
     Export-PwxOutboxCsv -Path 'existe.csv' | Out-Null
     Assert-PwxThrows { Export-PwxOutboxCsv -Path 'existe.csv' } 'Sobrescritura rechazada'
+}
+
+Run-PwxTest -Name 'outbox: item nuevo inicializa campos de transporte (PR-6)' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    $a = New-PwxOutboxItem -Type 'message' -Channel 'email' -Recipient 'a@b.com' -Subject 's' -Body 'b'
+    Assert-PwxEqual ('<' + $a.id + '@pwx.local>') $a.message_id 'message_id determinista desde la creacion'
+    Assert-PwxEqual 0 $a.attempts 'attempts inicia en 0'
+    Assert-PwxNull $a.last_error 'last_error nulo'
+    Assert-PwxNull $a.last_attempt_at 'last_attempt_at nulo'
+    $b = New-PwxOutboxItem -Type 'message' -Channel 'whatsapp' -Recipient '3005558899' -Subject 's2' -Body 'b2'
+    Assert-PwxEqual ('<' + $b.id + '@pwx.local>') $b.message_id 'message_id unico por item'
+    Assert-PwxTrue ($a.message_id -ne $b.message_id) 'message_ids distintos entre items'
+    $re = Get-PwxOutboxItem -Id $a.id
+    Assert-PwxEqual $a.message_id $re.message_id 'message_id persistido en disco'
+    Assert-PwxEqual 0 $re.attempts 'attempts persistido en disco'
+}
+
+Run-PwxTest -Name 'outbox: export CSV no altera campos de transporte ni estados' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    $draft = New-PwxOutboxItem -Type 'message' -Channel 'email' -Recipient 'ok@mail.com' -Subject 's' -Body 'b'
+    $approved = New-PwxOutboxItem -Type 'message' -Channel 'email' -Recipient 'ok2@mail.com' -Subject 's' -Body 'b'
+    Set-PwxOutboxStatus -Id $approved.id -Status 'APPROVED' -By 't' | Out-Null
+    $res = Export-PwxOutboxCsv
+    Assert-PwxEqual 1 $res.exported 'solo el DRAFT se exporta'
+    Assert-PwxEqual 0 $res.omitted.count 'sin omitidos'
+    foreach ($m in @($draft, $approved)) {
+        $after = Get-PwxOutboxItem -Id $m.id
+        Assert-PwxEqual 0 $after.attempts ("attempts intacto: " + $m.id)
+        Assert-PwxNull $after.last_attempt_at ("last_attempt_at intacto: " + $m.id)
+        Assert-PwxNull $after.last_error ("last_error intacto: " + $m.id)
+        Assert-PwxNotNull $after.message_id ("message_id intacto: " + $m.id)
+    }
+    Assert-PwxEqual 'DRAFT' (Get-PwxOutboxItem -Id $draft.id).status 'draft sigue DRAFT'
+    Assert-PwxEqual 'APPROVED' (Get-PwxOutboxItem -Id $approved.id).status 'approved sigue APPROVED'
 }

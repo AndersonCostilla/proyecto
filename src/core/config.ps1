@@ -31,8 +31,7 @@ function Get-PwxConfig {
     $requirePayment = $true
     if ($cfg.payments -and $null -ne $cfg.payments.requireApprovalBeforeProduction) {
         $requirePayment = [bool]$cfg.payments.requireApprovalBeforeProduction
-    }
-    if ($env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION) {
+    }    if ($env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION) {
         $rawPaymentPolicy = $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION.Trim().ToLowerInvariant()
         if ($rawPaymentPolicy -in @('0', 'false', 'no', 'off')) { $requirePayment = $false }
         elseif ($rawPaymentPolicy -in @('1', 'true', 'yes', 'on')) { $requirePayment = $true }
@@ -50,6 +49,7 @@ function Get-PwxConfig {
         LogLevel           = $cfg.logLevel
         ServiceCatalogPath = $catalogPath
         RequirePaymentBeforeProduction = $requirePayment
+        OutboxTransport     = $outboxTransport
     }
 }
 

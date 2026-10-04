@@ -166,6 +166,24 @@ Config:
 
 - `PWX_BACKUP_DIR` (opcional): raíz donde se guardan los bundles.
 
+## Outbox y transporte
+
+Mensajes salientes con aprobación humana obligatoria (`DRAFT → APPROVED → SENT`) y transporte real **100% gratuito y local** desde PR-6:
+
+- `file` → escribe un correo `.eml` estándar en `workspace/exports/eml/` (abierto con cualquier cliente de correo, adjuntos verificados con SHA-256).
+- `mock` → simula el envío (tests/desarrollo).
+- `mark-only` → solo cambia el estado (comportamiento histórico).
+- `smtp` → reservado para PR-7; hoy se rechaza con error claro (PWX funciona sin él).
+
+Reglas: un `DRAFT` jamás se envía, un `SENT` no se reenvía sin `-Force`, y ningún transporte abre conexiones de red.
+
+```powershell
+pwsh -File src/bin/pwx.ps1 outbox:approve -Id M-0001 -By anderson
+pwsh -File src/bin/pwx.ps1 outbox:send -Id M-0001 -Transport file
+```
+
+- Guía completa: [`docs/OUTBOX.md`](docs/OUTBOX.md)
+
 ## Pruebas automatizadas
 
 ```powershell
@@ -236,7 +254,7 @@ config:show / ollama:check
 - `config/services.json`: catálogo de servicios, precios y reglas de cotización.
 - `config/payment-methods.example.json`: plantilla de métodos de pago; copia local privada requerida para cobrar.
 - `store/`: datos locales de clientes, trabajos, pagos, comprobantes, salidas, QA, entregas y logs.
-- Variables de entorno disponibles: `PWX_ROOT`, `PWX_WORKSPACE`, `PWX_MODEL`, `PWX_OLLAMA_URL`, `PWX_OLLAMA_CONNECT_TIMEOUT`, `PWX_OLLAMA_REQUEST_TIMEOUT`, `PWX_PAYMENT_METHODS_FILE`.
+- Variables de entorno disponibles: `PWX_ROOT`, `PWX_WORKSPACE`, `PWX_MODEL`, `PWX_OLLAMA_URL`, `PWX_OLLAMA_CONNECT_TIMEOUT`, `PWX_OLLAMA_REQUEST_TIMEOUT`, `PWX_PAYMENT_METHODS_FILE`, `PWX_TRANSPORT` (transporte por defecto del outbox: `file|mock|mark-only`).
 
 ## Documentación
 
@@ -244,6 +262,7 @@ config:show / ollama:check
 - [Prospección](docs/PROSPECTING.md)
 - [Reglas de cotización](docs/PRICING.md)
 - [Pagos manuales](docs/PAYMENTS.md)
+- [Outbox y transporte](docs/OUTBOX.md)
 - [Panel web local](docs/WEB_PANEL.md)
 - [Servicio Word](docs/WORD_SERVICE.md)
 - [Contratos de servicios](docs/SERVICES.md)

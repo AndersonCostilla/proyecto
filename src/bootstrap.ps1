@@ -19,6 +19,7 @@ $moduleFiles = @(
     'core\pricing.ps1',
     'core\payments.ps1',
     'core\outbox.ps1',
+    'core\transport.ps1',
     'core\leads.ps1',
     'core\qa.ps1',
     'core\delivery.ps1',
