@@ -286,7 +286,7 @@ function Get-PwxWebSession {
     if ([string]::IsNullOrEmpty($Token)) { return $null }
     if (-not $script:PwxWebAuthSessions.ContainsKey($Token)) { return $null }
     $session = $script:PwxWebAuthSessions[$Token]
-    $expires = [datetime]$session.expires_at_utc
+    $expires = [datetime]::Parse([string]$session.expires_at_utc, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
     if ($expires -le [DateTime]::UtcNow) {
         $script:PwxWebAuthSessions.Remove($Token)
         return $null
@@ -314,7 +314,7 @@ function Invoke-PwxWebSessionSweep {
     $removed = 0
     foreach ($token in @($script:PwxWebAuthSessions.Keys)) {
         $session = $script:PwxWebAuthSessions[$token]
-        $expires = [datetime]$session.expires_at_utc
+        $expires = [datetime]::Parse([string]$session.expires_at_utc, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
         if ($expires -le $now) {
             $script:PwxWebAuthSessions.Remove($token)
             $removed++
