@@ -19,7 +19,7 @@ El sistema separa responsabilidades:
 - Bloqueo de producción comercial hasta que el pago esté aprobado.
 - Agente local de requisitos mediante Ollama, con salida JSON validada.
 - Producción, QA, versionado y entrega con `manifest.json` y SHA-256.
-- Servicio Excel implementado para normalización de planillas; servicios restantes en preparación.
+- Seis servicios implementados: Excel (planillas), Word, PDF, limpieza de datos, cómputos de construcción y Simulate (para pruebas).
 
 > El repositorio no contiene datos reales de clientes, comprobantes, números de pago ni claves. Los datos operativos se guardan en `store/`, que está ignorado por Git.
 
