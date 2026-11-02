@@ -31,6 +31,13 @@ function Get-PwxConfig {
     $requirePayment = $true
     if ($cfg.payments -and $null -ne $cfg.payments.requireApprovalBeforeProduction) {
         $requirePayment = [bool]$cfg.payments.requireApprovalBeforeProduction
+    }
+
+    # Transporte por defecto del outbox (PR-6). Vacio = resolver a 'mark-only'
+    # en transport.ps1. Valores validos: file | mock | mark-only | smtp(reservado).
+    $outboxTransport = ''
+    if ($cfg.outbox -and $cfg.outbox.transport) {
+        $outboxTransport = ([string]$cfg.outbox.transport).Trim().ToLowerInvariant()
     }    if ($env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION) {
         $rawPaymentPolicy = $env:PWX_REQUIRE_PAYMENT_BEFORE_PRODUCTION.Trim().ToLowerInvariant()
         if ($rawPaymentPolicy -in @('0', 'false', 'no', 'off')) { $requirePayment = $false }

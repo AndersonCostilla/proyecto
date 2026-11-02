@@ -181,6 +181,42 @@ Run-PwxTest -Name 'auth: sesiones crear/obtener/expirar/sweep/remove' -File 'uni
     Clear-PwxWebSessions | Out-Null
 }
 
+Run-PwxTest -Name 'auth: sesion no caduca por desfase de zona horaria' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    Clear-PwxWebSessions | Out-Null
+    try {
+        # expires_at_utc se guarda como instante UTC con diseno Z (ToString('o')).
+        # La sesion debe juzgarse por su instante UTC real, sin importar la zona
+        # horaria del host. Con el parseo previo ([datetime]$cadena) el instante
+        # se convertia a hora local: en un host UTC-5 una sesion con TTL de 30
+        # minutos se evaluaba como ya vencida (30 min - 5 h < 0) y caducaba antes
+        # de tiempo. Este test es el guardia de regresion de ese desfase.
+        $vigente = New-PwxWebSession -UserId 'tz-op' -Role 'operator' -TtlMinutes 30
+        Assert-PwxTrue (-not [string]::IsNullOrEmpty([string]$vigente.expires_at_utc)) 'expires_at_utc presente'
+        Assert-PwxTrue ([string]$vigente.expires_at_utc).EndsWith('Z') 'expires_at_utc se guarda en UTC (Z)'
+        Assert-PwxNotNull (Get-PwxWebSession -Token $vigente.token) 'TTL 30 min sigue vigente en UTC (sin desfase)'
+
+        # TTL largo: sigue vigente tambien bajo el parseo previo.
+        $largo = New-PwxWebSession -UserId 'tz-op2' -Role 'operator' -TtlMinutes 480
+        Assert-PwxNotNull (Get-PwxWebSession -Token $largo.token) 'TTL 480 min sigue vigente'
+
+        # TTL 0: ya vencida de verdad (Get la elimina con limpieza perezosa).
+        $vencida = New-PwxWebSession -UserId 'tz-ad' -Role 'admin' -TtlMinutes 0
+        Assert-PwxNull (Get-PwxWebSession -Token $vencida.token) 'TTL 0 min ya vencida'
+
+        # Barrido: otra vencida sin tocar antes con Get; el sweep la elimina.
+        $victim = New-PwxWebSession -UserId 'tz-ad2' -Role 'operator' -TtlMinutes 0
+        $removed = Invoke-PwxWebSessionSweep
+        Assert-PwxTrue ($removed -ge 1) ('sweep elimino la vencida; obtuvo ' + $removed)
+        Assert-PwxNull (Get-PwxWebSession -Token $victim.token) 'la vencida no reaparece tras el sweep'
+    }
+    finally {
+        Clear-PwxWebSessions | Out-Null
+    }
+}
+
 Run-PwxTest -Name 'auth: decision rutas publicas, privada y orden 401' -File 'unit' -Body {
     $ws = New-PwxTestWorkspace
     $env:PWX_WORKSPACE = $ws

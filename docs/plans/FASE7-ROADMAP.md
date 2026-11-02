@@ -1,5 +1,13 @@
 # PWX — Fase 7: "Operable a diario con riesgo bajo" (plan por PR)
 
+> ✅ **PLAN HISTÓRICO — COMPLETADO (con desvío documentado)** — La Fase 7 se cerró
+> como PR-1…PR-6 (CI, Backup/Restore, Auth del panel, transporte del outbox).
+> Desvío respecto al plan: PR-6 implementó el transporte gratuito `file`
+> (correo `.eml` 100% local) en lugar de SMTP; SMTP queda opcional post-v1.0.
+> Las cifras de este documento (base `a2481b2`, suite 109/109, "4 huecos")
+> corresponden al estado de 2026-09-27 y **no al actual**. Estado vigente:
+> [docs/RELEASE_V1.md](../RELEASE_V1.md).
+
 > Tech Lead / Maintainer · 2026-09-27 · base: `a2481b2` · suite 109/109 ✅
 > Alcance: (1) CI GitHub Actions · (2) Backup/Restore del `store/` ·
 > (3) Autenticación del panel web · (4) Transporte SMTP del outbox.

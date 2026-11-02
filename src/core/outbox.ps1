@@ -65,6 +65,29 @@ function Get-PwxOutboxItem {
     return Get-PwxJsonFile -Path $file
 }
 
+function Resolve-PwxOutboxAttachments {
+    # Normaliza y valida las rutas de adjuntos de outbox:new (v1.0):
+    # - lista separada por comas (patron CLI); una sola ruta tambien vale
+    # - cada ruta debe existir y ser un archivo
+    # - cada ruta debe resolver DENTRO del workspace (path traversal bloqueado)
+    # Devuelve rutas absolutas normalizadas; vacio si no se especifico nada.
+    param([string]$Raw)
+    $result = @()
+    if ([string]::IsNullOrWhiteSpace($Raw)) { return $result }
+    $cfg = Get-PwxConfig
+    foreach ($p in ($Raw -split ',')) {
+        $trimmed = $p.Trim()
+        if (-not $trimmed) { continue }
+        $full = Resolve-PwxFullPath -Path $trimmed
+        $full = Assert-PwxSafeWorkspacePath -WorkspacePath $cfg.WorkspacePath -Path $full
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
+            throw "Adjunto inexistente o no es un archivo: $trimmed"
+        }
+        $result += $full
+    }
+    return $result
+}
+
 function Get-PwxOutboxItems {
     param([string]$Status = '')
     $result = @()

@@ -167,3 +167,66 @@ Run-PwxTest -Name 'outbox: export CSV no altera campos de transporte ni estados'
     Assert-PwxEqual 'DRAFT' (Get-PwxOutboxItem -Id $draft.id).status 'draft sigue DRAFT'
     Assert-PwxEqual 'APPROVED' (Get-PwxOutboxItem -Id $approved.id).status 'approved sigue APPROVED'
 }
+
+Run-PwxTest -Name 'outbox: Resolve-PwxOutboxAttachments valida y normaliza (0/1/N, errores)' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    $attDir = Join-Path $ws 'adj'
+    New-PwxDirectory -Path $attDir | Out-Null
+    $a = Join-Path $attDir 'a.txt'
+    $b = Join-Path $attDir 'b.txt'
+    [System.IO.File]::WriteAllText($a, 'AAAA', (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText($b, 'BBBB', (New-Object System.Text.UTF8Encoding($false)))
+
+    # 0 adjuntos: sin flag o vacio
+    Assert-PwxEqual 0 @(@(Resolve-PwxOutboxAttachments -Raw '')).Count 'raw vacio -> 0 adjuntos'
+    Assert-PwxEqual 0 @(@(Resolve-PwxOutboxAttachments -Raw $null)).Count 'raw nulo -> 0 adjuntos'
+
+    # 1 adjunto: normalizado a ruta absoluta
+    $one = @(Resolve-PwxOutboxAttachments -Raw $a)
+    Assert-PwxEqual 1 $one.Count 'un adjunto'
+    Assert-PwxEqual ([System.IO.Path]::GetFullPath($a)) $one[0] 'normalizado a absoluto'
+
+    # multiples adjuntos separados por coma (con espacios tolerados)
+    $two = @(Resolve-PwxOutboxAttachments -Raw ($a + ' , ' + $b))
+    Assert-PwxEqual 2 $two.Count 'dos adjuntos por coma'
+    Assert-PwxTrue ($two -contains [System.IO.Path]::GetFullPath($b)) 'segunda ruta presente'
+
+    # inexistente DENTRO del workspace
+    Assert-PwxThrows { Resolve-PwxOutboxAttachments -Raw (Join-Path $ws 'no-existe.txt') } 'inexistente rechazado'
+
+    # directorio (no archivo) dentro del workspace
+    Assert-PwxThrows { Resolve-PwxOutboxAttachments -Raw $attDir } 'directorio rechazado'
+
+    # archivo existente FUERA del workspace -> path traversal
+    $outside = Join-Path ([System.IO.Path]::GetTempPath()) ('pwx-att-outside-' + [guid]::NewGuid().ToString('N') + '.txt')
+    [System.IO.File]::WriteAllText($outside, 'FUERA', (New-Object System.Text.UTF8Encoding($false)))
+    try {
+        Assert-PwxThrows { Resolve-PwxOutboxAttachments -Raw $outside } 'fuera del workspace rechazado'
+    }
+    finally {
+        Remove-Item -LiteralPath $outside -Force -ErrorAction SilentlyContinue
+    }
+
+    # traversal explicito con ..
+    Assert-PwxThrows { Resolve-PwxOutboxAttachments -Raw (Join-Path $ws '..\..\escape.txt') } 'traversal con .. rechazado'
+}
+
+Run-PwxTest -Name 'outbox: items con attachments resueltos registran sha256 y size' -File 'unit' -Body {
+    $ws = New-PwxTestWorkspace
+    $env:PWX_WORKSPACE = $ws
+    Invoke-PwxBootstrap
+    $attDir = Join-Path $ws 'docs-entrega'
+    New-PwxDirectory -Path $attDir | Out-Null
+    $att = Join-Path $attDir 'entrega.txt'
+    $content = 'contenido verificable del adjunto'
+    [System.IO.File]::WriteAllText($att, $content, (New-Object System.Text.UTF8Encoding($false)))
+
+    $resolved = @(Resolve-PwxOutboxAttachments -Raw $att)
+    $msg = New-PwxOutboxItem -Type 'message' -Channel 'email' -Recipient 'cli@correo.com' -Subject 's' -Body 'b' -Attachments $resolved
+    Assert-PwxEqual 1 @($msg.attachments).Count 'adjunto registrado'
+    Assert-PwxEqual (Get-PwxSha256 -Path $att) $msg.attachments[0].sha256 'sha256 registrado'
+    Assert-PwxTrue ($msg.attachments[0].size -gt 0) 'size registrado'
+    Assert-PwxTrue (([string]$msg.attachments[0].path -replace '\\', '/') -like '*docs-entrega/entrega.txt') 'ruta normalizada guardada'
+}

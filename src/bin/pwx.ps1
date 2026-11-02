@@ -33,23 +33,37 @@ ESTADO DEL TRABAJO
 
 SERVICIOS Y COTIZACIÓN:
   services:list
-  price:calc        -ServiceId <id> [-Addons rush,extra]  (precio base histórico)
-  quote:calc        -ServiceId <id> [-Addons rush,extra] [-Complexity basic|standard|advanced|expert] [-Units 1] [-DiscountPct 0]
+  price:calc        -ServiceId <id> [-Addons <ids>]  (precio base histórico)
+  quote:calc        -ServiceId <id> [-Addons <ids>] [-Complexity basic|standard|advanced|expert] [-Units 1] [-DiscountPct 0]
+  (los ids de addons reales dependen del servicio: config/services.json y docs/PRICING.md)
 
 PAGOS MANUALES:
   payment:methods
-  payment:request   -JobId <id> -Method <nequi|bank-transfer> [-Addons rush,extra] [-Complexity standard] [-Units 1] [-DiscountPct 0]
+  payment:request   -JobId <id> -Method <nequi|bank-transfer> [-Addons <ids>] [-Complexity standard] [-Units 1] [-DiscountPct 0]
   payment:show      -JobId <id>
   payment:proof     -JobId <id> -Path <comprobante.png|jpg|pdf> [-Reference <referencia>]
   payment:approve   -JobId <id> [-By <operador>]
   payment:reject    -JobId <id> -Reason <motivo> [-By <operador>]
 
+PROSPECCIÓN (LEADS):
+  lead:new            -Name <nombre> [-Company <empresa>] [-Email <email>] [-Phone <tel>] [-City <ciudad>] [-Department <dpto>] [-Website <web>]
+  lead:import         -Path <archivo .csv o .json>
+  lead:import-socrata -Url <url> [-Limit 200] [-Map <mapa>]
+  lead:list
+  lead:dedupe
+  lead:score
+  lead:draft          -LeadId <id> [-Channel email|whatsapp]
+  lead:convert        -LeadId <id>
+
 OUTBOX:
-  outbox:new        -Recipient <dest> -Subject <asunto> -Body <texto> [-Type message] [-JobId <id>]
+  outbox:new        -Recipient <dest> -Subject <asunto> -Body <texto> [-Type message] [-JobId <id>] [-Attachments <rutas>]
+                    (adjuntos: rutas existentes dentro del workspace, separadas por coma; se registran con sha256)
   outbox:show       -Id <msg-id>
   outbox:list       [-Status DRAFT|APPROVED|SENT]
   outbox:approve    -Id <msg-id> -By <quien>
-  outbox:send       -Id <msg-id>
+  outbox:send       -Id <msg-id> [-Transport file|mock|mark-only|smtp] [-Force]
+                    (envia solo APPROVED; file genera correo .eml 100% local en workspace/exports/eml;
+                     DRAFT jamas se envia; SENT requiere -Force; smtp reservado PR-7)
   outbox:export     [-Status DRAFT] [-Path <ruta>]  (exporta borradores DRAFT a workspace/exports; solo lectura, no envia)
 
 PANEL WEB LOCAL:
@@ -90,8 +104,87 @@ function Test-PwxFlagPresent {
     return ($FlagList -contains $Name)
 }
 
-$cmd = if ($args.Count -gt 0) { $args[0] } else { '' }
-$rest = @($args[1..($args.Count - 1)])
+# Contrato de flags por comando (validacion centralizada de argumentos).
+# - values   -> flags que consumen el token siguiente como valor (Read-PwxFlag)
+# - switches -> flags booleanos (Test-PwxFlagPresent)
+# Un flag no listado lanza UNKNOWN_FLAG y un token suelto lanza UNKNOWN_ARGUMENT:
+# un typo (p.ej. -Transprot) NO puede ignorarse en silencio y caer al default.
+$PwxCliFlagContracts = @{
+    'client:new'          = @{ values = @('-Name', '-Contact'); switches = @() }
+    'client:list'         = @{ values = @(); switches = @() }
+    'client:show'         = @{ values = @('-ClientId'); switches = @() }
+    'job:new'             = @{ values = @('-ClientId', '-Service', '-Description'); switches = @() }
+    'job:show'            = @{ values = @('-JobId'); switches = @() }
+    'job:list'            = @{ values = @('-ClientId'); switches = @() }
+    'job:requisitos'      = @{ values = @('-JobId', '-Request'); switches = @() }
+    'job:produce'         = @{ values = @('-JobId'); switches = @() }
+    'job:input'           = @{ values = @('-JobId', '-Path', '-TargetName'); switches = @() }
+    'job:qa'              = @{ values = @('-JobId'); switches = @() }
+    'job:deliver'         = @{ values = @('-JobId'); switches = @('-AllowFail') }
+    'job:approvedeliver'  = @{ values = @('-JobId', '-By'); switches = @() }
+    'job:state'           = @{ values = @('-JobId', '-To', '-Reason'); switches = @() }
+    'job:note'            = @{ values = @('-JobId', '-Note'); switches = @() }
+    'services:list'       = @{ values = @(); switches = @() }
+    'price:calc'          = @{ values = @('-ServiceId', '-Addons'); switches = @() }
+    'quote:calc'          = @{ values = @('-ServiceId', '-Addons', '-Complexity', '-Units', '-DiscountPct'); switches = @() }
+    'payment:methods'     = @{ values = @(); switches = @() }
+    'payment:request'     = @{ values = @('-JobId', '-Method', '-Addons', '-Complexity', '-Units', '-DiscountPct'); switches = @() }
+    'payment:show'        = @{ values = @('-JobId'); switches = @() }
+    'payment:proof'       = @{ values = @('-JobId', '-Path', '-Reference'); switches = @() }
+    'payment:approve'     = @{ values = @('-JobId', '-By'); switches = @() }
+    'payment:reject'      = @{ values = @('-JobId', '-Reason', '-By'); switches = @() }
+    'outbox:new'          = @{ values = @('-Recipient', '-Subject', '-Body', '-Type', '-JobId', '-Attachments'); switches = @() }
+    'outbox:show'         = @{ values = @('-Id'); switches = @() }
+    'outbox:list'         = @{ values = @('-Status'); switches = @() }
+    'outbox:approve'      = @{ values = @('-Id', '-By'); switches = @() }
+    'outbox:send'         = @{ values = @('-Id', '-Transport'); switches = @('-Force') }
+    'outbox:export'       = @{ values = @('-Status', '-Path'); switches = @() }
+    'lead:new'            = @{ values = @('-Name', '-Company', '-Email', '-Phone', '-City', '-Department', '-Website'); switches = @() }
+    'lead:import'         = @{ values = @('-Path'); switches = @() }
+    'lead:import-socrata' = @{ values = @('-Url', '-Limit', '-Map'); switches = @() }
+    'lead:list'           = @{ values = @(); switches = @() }
+    'lead:dedupe'         = @{ values = @(); switches = @() }
+    'lead:score'          = @{ values = @(); switches = @() }
+    'lead:draft'          = @{ values = @('-LeadId', '-Channel'); switches = @() }
+    'lead:convert'        = @{ values = @('-LeadId'); switches = @() }
+    'web:start'           = @{ values = @('-Port'); switches = @('-Dev') }
+    'web:hash'            = @{ values = @('-Password'); switches = @() }
+    'config:show'         = @{ values = @(); switches = @() }
+    'ollama:check'        = @{ values = @(); switches = @() }
+    'backup:create'       = @{ values = @('-Label'); switches = @() }
+    'backup:list'         = @{ values = @(); switches = @() }
+    'backup:verify'       = @{ values = @('-Path'); switches = @() }
+    'backup:restore'      = @{ values = @('-Path'); switches = @('-Force') }
+}
+
+function Test-PwxCliArguments {
+    # Valida los tokens de un comando contra su contrato antes de despachar.
+    # Los valores de flags conocidos se saltan (pueden empezar con '-'), los
+    # switches avanzan uno, y cualquier otra cosa es error inmediato.
+    param([string]$Command, [string[]]$Tokens)
+    $contract = $PwxCliFlagContracts[$Command]
+    if ($null -eq $contract) { return }
+    $allowed = @(@($contract.values) + @($contract.switches))
+    $i = 0
+    while ($i -lt $Tokens.Count) {
+        $t = [string]$Tokens[$i]
+        if ($t.Length -gt 1 -and $t.StartsWith('-')) {
+            if (@($contract.switches) -contains $t) { $i++; continue }
+            if (@($contract.values) -contains $t) { $i += 2; continue }
+            throw ("UNKNOWN_FLAG: '{0}' no es un flag valido de {1} (validos: {2})" -f $t, $Command, ($allowed -join ' '))
+        }
+        throw ("UNKNOWN_ARGUMENT: '{0}' no es un argumento de {1}; este comando usa flags (validos: {2})" -f $t, $Command, ($allowed -join ' '))
+    }
+}
+
+$cmd = if ($args.Count -gt 0) { [string]$args[0] } else { '' }
+# Solo hay tokens de flags si hay mas de un argumento. (Antes este slice con
+# Count==1 producia 1..0 = (1,0) y colaba $null + el comando como "flags";
+# inofensivo con Read-PwxFlag, pero invalido para la validacion de contrato.)
+$rest = @()
+if ($args.Count -gt 1) { $rest = @($args[1..($args.Count - 1)]) }
+
+Test-PwxCliArguments -Command $cmd -Tokens $rest
 
 switch ($cmd) {
     'client:new' {
@@ -313,10 +406,14 @@ switch ($cmd) {
         $body = Read-PwxFlag -FlagList $rest -Name '-Body'
         $type = Read-PwxFlag -FlagList $rest -Name '-Type'
         $jobId = Read-PwxFlag -FlagList $rest -Name '-JobId'
+        $attachmentsRaw = Read-PwxFlag -FlagList $rest -Name '-Attachments'
         if (-not $recipient) { throw 'Falta -Recipient' }
         if (-not $subject) { throw 'Falta -Subject' }
         if (-not $body) { throw 'Falta -Body' }
-        $item = New-PwxOutboxItem -Recipient $recipient -Subject $subject -Body $body -Type $type -JobId $jobId
+        # Rutas separadas por coma; deben existir y quedar dentro del workspace
+        # (path traversal bloqueado). Sin el flag: comportamiento anterior.
+        $attachments = @(Resolve-PwxOutboxAttachments -Raw $attachmentsRaw)
+        $item = New-PwxOutboxItem -Recipient $recipient -Subject $subject -Body $body -Type $type -JobId $jobId -Attachments $attachments
         $item | ConvertTo-Json -Depth 6
         exit 0
     }
